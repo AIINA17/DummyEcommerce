@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 
 interface Product {
   id: number;
@@ -24,14 +26,16 @@ interface CartItem {
 }
 
 export default function CartPage() {
+  const router = useRouter();
+  const { data: session, status } = useSession();
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState<{ message: string; type: string } | null>(null);
 
-  // TODO: Ganti dengan user ID dari session/auth
-  const userId = 1;
+  const userId = session?.user?.id ? Number(session.user.id) : null;
 
   async function loadCart() {
+    if (!userId) return;
     setLoading(true);
     try {
       const res = await fetch(`/api/cart?user_id=${userId}`);
@@ -126,7 +130,15 @@ export default function CartPage() {
     window.location.href = "/checkout";
   }
 
-  useEffect(() => { loadCart(); }, []);
+  useEffect(() => {
+    if (status === "unauthenticated") {
+      router.push("/login");
+      return;
+    }
+    if (status === "authenticated" && userId) {
+      loadCart();
+    }
+  }, [status, userId]);
 
   return (
     <main className="main-container">

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 
 /* =======================
    TYPES
@@ -41,6 +42,7 @@ const PAYMENT_METHODS = [
 ======================= */
 export default function CheckoutPage() {
   const router = useRouter();
+  const { data: session, status } = useSession();
   
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -48,13 +50,13 @@ export default function CheckoutPage() {
   const [payment, setPayment] = useState("GoPay");
   const [toast, setToast] = useState<{ message: string; type: string } | null>(null);
 
-  // TODO: Ganti dengan user ID dari session/auth
-  const userId = 1;
+  const userId = session?.user?.id ? Number(session.user.id) : null;
 
   /* =======================
      LOAD CART
   ======================= */
   async function loadCart() {
+    if (!userId) return;
     setLoading(true);
     try {
       const res = await fetch(`/api/cart?user_id=${userId}`);
@@ -69,8 +71,14 @@ export default function CheckoutPage() {
   }
 
   useEffect(() => {
-    loadCart();
-  }, []);
+    if (status === "unauthenticated") {
+      router.push("/login");
+      return;
+    }
+    if (status === "authenticated" && userId) {
+      loadCart();
+    }
+  }, [status, userId]);
 
   /* =======================
      COMPUTED VALUES
@@ -116,6 +124,10 @@ export default function CheckoutPage() {
   ======================= */
   async function handlePlaceOrder() {
     if (!cartItems.length) return;
+    if (!userId) {
+      router.push("/login");
+      return;
+    }
     setSubmitting(true);
 
     try {

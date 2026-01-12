@@ -3,6 +3,7 @@
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useSession } from "next-auth/react";
 
 /* =======================
    TYPES
@@ -37,6 +38,7 @@ const PAYMENT_METHODS = [
 export default function CheckoutProductPage() {
   const { id } = useParams();
   const router = useRouter();
+  const { data: session, status } = useSession();
 
   const [product, setProduct] = useState<Product | null>(null);
   const [loading, setLoading] = useState(true);
@@ -45,8 +47,7 @@ export default function CheckoutProductPage() {
   const [payment, setPayment] = useState("GoPay");
   const [toast, setToast] = useState<{ message: string; type: string } | null>(null);
 
-  // TODO: Ganti dengan user ID dari session/auth
-  const userId = 1;
+  const userId = session?.user?.id ? Number(session.user.id) : null;
 
   /* =======================
      LOAD PRODUCT
@@ -94,6 +95,10 @@ export default function CheckoutProductPage() {
   ======================= */
   async function handlePlaceOrder() {
     if (!product) return;
+    if (status === "unauthenticated" || !userId) {
+      router.push("/login");
+      return;
+    }
     setSubmitting(true);
 
     try {
