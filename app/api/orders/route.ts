@@ -1,13 +1,40 @@
 import { NextResponse } from "next/server";
-import { orders, findProduct } from "../_store";
+import { supabase } from "@/lib/supabase";
 
-export async function GET() {
+// GET all orders (by user_id)
+export async function GET(req: Request) {
+  const { searchParams } = new URL(req.url);
+  const userId = searchParams.get("user_id") || "1"; // Default user 1
+
+  const { data: orders, error } = await supabase
+    .from("orders")
+    .select(`
+      *,
+      order_items (
+        id,
+        product_id,
+        quantity,
+        price_at_purchase,
+        name_snapshot
+      )
+    `)
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    return NextResponse.json(
+      { success: false, message: error.message },
+      { status: 500 }
+    );
+  }
+
   return NextResponse.json({
     success: true,
-    data: orders
+    data: orders || [],
   });
 }
 
+// POST create new order
 export async function POST(req: Request) {
   let body: any;
 
@@ -20,39 +47,64 @@ export async function POST(req: Request) {
     );
   }
 
-  const product = findProduct(Number(body.product_id));
+  const { user_id = 1, payment_method, items } = body;
 
-  if (!product) {
+  if (!items || !Array.isArray(items) || items.length === 0) {
     return NextResponse.json(
-      { success: false, message: "Product not found" },
-      { status: 404 }
+      { success: false, message: "No items provided" },
+      { status: 400 }
     );
   }
 
-  const qty = Number(body.qty) || 1;
+  // Calculate total
+  const total = items.reduce(
+    (sum: number, item: any) => sum + item.price * item.quantity,
+    0
+  );
 
-  const newOrder = {
-    id: orders.length + 1,
-    status: "pending",
+  // Create order
+  const { data: order, error: orderError } = await supabase
+    .from("orders")
+    .insert({
+      user_id,
+      payment_method: payment_method || "unselected",
+      status: "pending",
+      total,
+    })
+    .select()
+    .single();
 
-    payment_method: body.payment_method || "unselected",
+  if (orderError) {
+    return NextResponse.json(
+      { success: false, message: orderError.message },
+      { status: 500 }
+    );
+  }
 
-    items: [
-      {
-        product_id: product.id,
-        qty,
-        name_snapshot: product.name,
-        price_at_purchase: product.price
-      }
-    ],
+  // Create order items
+  const orderItems = items.map((item: any) => ({
+    order_id: order.id,
+    product_id: item.product_id,
+    quantity: item.quantity,
+    price_at_purchase: item.price,
+    name_snapshot: item.name,
+  }));
 
-    total: product.price * qty
-  };
+  const { error: itemsError } = await supabase
+    .from("order_items")
+    .insert(orderItems);
 
-  orders.push(newOrder);
+  if (itemsError) {
+    // Rollback: delete order if items failed
+    await supabase.from("orders").delete().eq("id", order.id);
+    return NextResponse.json(
+      { success: false, message: itemsError.message },
+      { status: 500 }
+    );
+  }
 
   return NextResponse.json({
     success: true,
-    data: newOrder
+    data: { ...order, items: orderItems },
   });
 }

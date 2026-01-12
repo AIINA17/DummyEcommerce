@@ -1,10 +1,25 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
+
+interface Product {
+  id: number;
+  name: string;
+  description: string;
+  price: number;
+  category: string;
+  rating: number;
+  stock: number;
+  image_url: string;
+}
 
 export default function Home() {
-  const [products, setProducts] = useState<any[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [toast, setToast] = useState<{ message: string; type: string } | null>(null);
 
+  // Filter states
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("");
   const [min, setMin] = useState("");
@@ -12,7 +27,12 @@ export default function Home() {
   const [rating, setRating] = useState("");
   const [sort, setSort] = useState("");
 
-  function load() {
+  // TODO: Ganti dengan user ID dari session/auth
+  const userId = 1;
+
+  // Load products
+  async function loadProducts() {
+    setLoading(true);
     const params = new URLSearchParams();
 
     if (query) params.append("q", query);
@@ -22,81 +42,239 @@ export default function Home() {
     if (rating) params.append("rating", rating);
     if (sort) params.append("sort", sort);
 
-    fetch("/api/products?" + params.toString())
-      .then(r => r.json())
-      .then(d => setProducts(d.data));
+    try {
+      const res = await fetch("/api/products?" + params.toString());
+      const data = await res.json();
+      setProducts(data.data || []);
+    } catch (error) {
+      console.error("Error loading products:", error);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  // Add to cart
+  async function addToCart(productId: number) {
+    try {
+      const res = await fetch("/api/cart", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          user_id: userId,
+          product_id: productId,
+          quantity: 1,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (res.ok) {
+        showToast("Berhasil ditambahkan ke keranjang! 🛒", "success");
+      } else {
+        showToast(data.error || "Gagal menambahkan ke keranjang", "error");
+      }
+    } catch (error) {
+      showToast("Terjadi kesalahan", "error");
+    }
+  }
+
+  // Show toast notification
+  function showToast(message: string, type: string) {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 3000);
+  }
+
+  // Reset filters
+  function resetFilters() {
+    setQuery("");
+    setCategory("");
+    setMin("");
+    setMax("");
+    setRating("");
+    setSort("");
   }
 
   useEffect(() => {
-    load();
+    loadProducts();
   }, []);
 
+  // Format price to Rupiah
+  function formatPrice(price: number) {
+    return new Intl.NumberFormat("id-ID", {
+      style: "currency",
+      currency: "IDR",
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    }).format(price);
+  }
+
   return (
-    <div className="container">
-      <h2>Products</h2>
-
-      {/* CONTROLS */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10 }}>
-        <input
-          className="input"
-          placeholder="Search product name…"
-          value={query}
-          onChange={e => setQuery(e.target.value)}
-        />
-
-        <select className="input" onChange={e => setCategory(e.target.value)}>
-          <option value="">All Categories</option>
-          <option value="Gadget & Tech">Gadget & Tech</option>
-          <option value="Lifestyle">Lifestyle</option>
-          <option value="Home & Living">Home & Living</option>
-          <option value="Lain-lain">Lain-lain</option>
-        </select>
-
-        <select className="input" onChange={e => setSort(e.target.value)}>
-          <option value="">Sort Default</option>
-          <option value="price_asc">Price: Low → High</option>
-          <option value="price_desc">Price: High → Low</option>
-          <option value="rating_desc">Rating: Highest</option>
-        </select>
+    <main className="main-container">
+      {/* Page Header */}
+      <div className="page-header">
+        <h1 className="page-title">🛍️ Semua Produk</h1>
+        <p className="page-subtitle">Temukan produk terbaik untuk kebutuhanmu</p>
       </div>
 
-      <br />
+      {/* Filter Section */}
+      <section className="filter-section">
+        <div className="filter-row">
+          {/* Search Input */}
+          <input
+            type="text"
+            className="filter-input"
+            placeholder="🔍 Cari nama produk..."
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10 }}>
-        <input className="input" placeholder="Min price" onChange={e => setMin(e.target.value)} />
-        <input className="input" placeholder="Max price" onChange={e => setMax(e.target.value)} />
-        <select className="input" onChange={e => setRating(e.target.value)}>
-          <option value="">Min Rating</option>
-          <option value="4">4★+</option>
-          <option value="4.5">4.5★+</option>
-        </select>
-      </div>
+          {/* Category Select */}
+          <select
+            className="filter-input"
+            value={category}
+            onChange={(e) => setCategory(e.target.value)}
+          >
+            <option value="">📂 Semua Kategori</option>
+            <option value="Gadget & Tech">💻 Gadget & Tech</option>
+            <option value="Lifestyle">👟 Lifestyle</option>
+            <option value="Home & Living">🏠 Home & Living</option>
+            <option value="Lain-lain">📦 Lain-lain</option>
+          </select>
 
-      <br />
+          {/* Sort Select */}
+          <select
+            className="filter-input"
+            value={sort}
+            onChange={(e) => setSort(e.target.value)}
+          >
+            <option value="">🔄 Urutkan Default</option>
+            <option value="price_asc">💰 Harga: Rendah → Tinggi</option>
+            <option value="price_desc">💰 Harga: Tinggi → Rendah</option>
+            <option value="rating_desc">⭐ Rating Tertinggi</option>
+          </select>
+        </div>
 
-      <button className="btn" onClick={load}>Apply</button>
+        <div className="filter-row">
+          {/* Min Price */}
+          <input
+            type="number"
+            className="filter-input"
+            placeholder="💵 Harga minimum"
+            value={min}
+            onChange={(e) => setMin(e.target.value)}
+          />
 
-      <br /><br />
+          {/* Max Price */}
+          <input
+            type="number"
+            className="filter-input"
+            placeholder="💵 Harga maksimum"
+            value={max}
+            onChange={(e) => setMax(e.target.value)}
+          />
 
-      {/* PRODUCT GRID */}
-      <div className="grid">
-        {products.map(p => (
-          <div key={p.id} className="card">
-            <h3>{p.name}</h3>
+          {/* Rating Filter */}
+          <select
+            className="filter-input"
+            value={rating}
+            onChange={(e) => setRating(e.target.value)}
+          >
+            <option value="">⭐ Semua Rating</option>
+            <option value="4">⭐ 4.0+</option>
+            <option value="4.5">⭐ 4.5+</option>
+          </select>
+        </div>
 
-            <p>Category: {p.category}</p>
-            <p>⭐ {p.rating}</p>
+        {/* Filter Actions */}
+        <div className="filter-actions">
+          <button className="btn btn-primary" onClick={loadProducts}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <circle cx="11" cy="11" r="8"/>
+              <path d="M21 21l-4.35-4.35"/>
+            </svg>
+            Terapkan Filter
+          </button>
+          <button className="btn btn-secondary" onClick={resetFilters}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M3 12a9 9 0 109-9 9.75 9.75 0 00-6.74 2.74L3 8"/>
+              <path d="M3 3v5h5"/>
+            </svg>
+            Reset
+          </button>
+        </div>
+      </section>
 
-            <p style={{ fontWeight: "bold" }}>
-              Rp {p.price.toLocaleString()}
-            </p>
+      {/* Products Grid */}
+      {loading ? (
+        <div className="loading">
+          <div className="spinner"></div>
+        </div>
+      ) : products.length === 0 ? (
+        <div className="empty-state">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+            <path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+          </svg>
+          <h3>Produk tidak ditemukan</h3>
+          <p>Coba ubah filter pencarian kamu</p>
+        </div>
+      ) : (
+        <div className="product-grid">
+          {products.map((product) => (
+            <div key={product.id} className="product-card">
+              {/* Product Image */}
+              <img
+                src={product.image_url || `https://picsum.photos/seed/${product.id}/300/300`}
+                alt={product.name}
+                className="product-image"
+                onError={(e) => {
+                  (e.target as HTMLImageElement).src = `https://picsum.photos/seed/${product.id}/300/300`;
+                }}
+              />
 
-            <a href={`/product/${p.id}`}>
-              <button className="btn">Detail</button>
-            </a>
-          </div>
-        ))}
-      </div>
-    </div>
+              {/* Product Info */}
+              <div className="product-info">
+                <h3 className="product-name">{product.name}</h3>
+
+                <p className="product-price">{formatPrice(product.price)}</p>
+
+                <div className="product-meta">
+                  <div className="product-rating">
+                    <svg viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+                    </svg>
+                    <span>{product.rating}</span>
+                  </div>
+                  <span className="product-category">{product.category}</span>
+                </div>
+
+                {/* Add to Cart Button */}
+                <button
+                  className="btn btn-primary btn-sm"
+                  style={{ width: "100%", marginTop: "12px" }}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    addToCart(product.id);
+                  }}
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <circle cx="9" cy="21" r="1"/>
+                    <circle cx="20" cy="21" r="1"/>
+                    <path d="M1 1h4l2.68 13.39a2 2 0 002 1.61h9.72a2 2 0 002-1.61L23 6H6"/>
+                  </svg>
+                  + Keranjang
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Toast Notification */}
+      {toast && (
+        <div className={`toast ${toast.type}`}>
+          {toast.message}
+        </div>
+      )}
+    </main>
   );
 }

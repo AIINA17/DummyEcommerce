@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { orders } from "../../../_store";
+import { supabase } from "@/lib/supabase";
 
 export async function POST(
   req: Request,
@@ -7,19 +7,23 @@ export async function POST(
 ) {
   const { id } = await ctx.params;
 
-  const order = orders.find(o => o.id === Number(id));
+  // Update order status to paid
+  const { data: order, error } = await supabase
+    .from("orders")
+    .update({ status: "paid", updated_at: new Date().toISOString() })
+    .eq("id", Number(id))
+    .select()
+    .single();
 
-  if (!order) {
+  if (error || !order) {
     return NextResponse.json(
       { success: false, message: "Order not found" },
       { status: 404 }
     );
   }
 
-  order.status = "paid";
-
   return NextResponse.json({
     success: true,
-    data: order
+    data: order,
   });
 }

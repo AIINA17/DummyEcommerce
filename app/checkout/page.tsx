@@ -1,8 +1,8 @@
 "use client";
 
-import { useParams, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 
 /* =======================
    TYPES
@@ -13,9 +13,14 @@ interface Product {
   price: number;
   image_url: string;
   category: string;
-  rating: number;
   stock: number;
-  description: string;
+}
+
+interface CartItem {
+  id: number;
+  product_id: number;
+  quantity: number;
+  products: Product;
 }
 
 /* =======================
@@ -34,14 +39,12 @@ const PAYMENT_METHODS = [
 /* =======================
    PAGE
 ======================= */
-export default function CheckoutProductPage() {
-  const { id } = useParams();
+export default function CheckoutPage() {
   const router = useRouter();
-
-  const [product, setProduct] = useState<Product | null>(null);
+  
+  const [cartItems, setCartItems] = useState<CartItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
-  const [qty, setQty] = useState(1);
   const [payment, setPayment] = useState("GoPay");
   const [toast, setToast] = useState<{ message: string; type: string } | null>(null);
 
@@ -49,27 +52,37 @@ export default function CheckoutProductPage() {
   const userId = 1;
 
   /* =======================
-     LOAD PRODUCT
+     LOAD CART
   ======================= */
-  useEffect(() => {
-    async function loadProduct() {
-      try {
-        const res = await fetch(`/api/products/${id}`);
-        const data = await res.json();
-        setProduct(data.data);
-      } catch (error) {
-        console.error("Error loading product:", error);
-      } finally {
-        setLoading(false);
-      }
+  async function loadCart() {
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/cart?user_id=${userId}`);
+      const data = await res.json();
+      setCartItems(data.data || []);
+    } catch (error) {
+      console.error("Error loading cart:", error);
+      showToast("Gagal memuat keranjang", "error");
+    } finally {
+      setLoading(false);
     }
-    loadProduct();
-  }, [id]);
+  }
+
+  useEffect(() => {
+    loadCart();
+  }, []);
 
   /* =======================
      COMPUTED VALUES
   ======================= */
-  const subtotal = product ? product.price * qty : 0;
+  const { subtotal, totalItems } = useMemo(() => {
+    const subtotal = cartItems.reduce(
+      (sum, i) => sum + i.products.price * i.quantity, 0
+    );
+    const totalItems = cartItems.reduce((s, i) => s + i.quantity, 0);
+    return { subtotal, totalItems };
+  }, [cartItems]);
+
   const serviceFee = 1000;
   const shippingCost = 0;
   const totalPayment = subtotal + serviceFee + shippingCost;
@@ -90,32 +103,40 @@ export default function CheckoutProductPage() {
   }
 
   /* =======================
+     CLEAR CART AFTER ORDER
+  ======================= */
+  async function clearCart() {
+    for (const item of cartItems) {
+      await fetch(`/api/cart?cart_id=${item.id}`, { method: "DELETE" });
+    }
+  }
+
+  /* =======================
      PLACE ORDER
   ======================= */
   async function handlePlaceOrder() {
-    if (!product) return;
+    if (!cartItems.length) return;
     setSubmitting(true);
 
     try {
+      // Prepare items for order
+      const items = cartItems.map(item => ({
+        product_id: item.products.id,
+        quantity: item.quantity,
+        price: item.products.price,
+        name: item.products.name,
+      }));
+
+      // Create order via API
       const res = await fetch("/api/orders", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           user_id: userId,
           payment_method: payment,
-          items: [{
-            product_id: product.id,
-            quantity: qty,
-            price: product.price,
-            name: product.name,
-          }],
+          items,
         }),
       });
-
-      if (res.status === 401) {
-        router.push("/login");
-        return;
-      }
 
       const data = await res.json();
 
@@ -125,8 +146,12 @@ export default function CheckoutProductPage() {
         return;
       }
 
-      showToast("Pesanan berhasil dibuat! 🎉", "success");
+      // Clear cart after successful order
+      await clearCart();
 
+      showToast("Pesanan berhasil dibuat! 🎉", "success");
+      
+      // Redirect to orders page
       setTimeout(() => {
         router.push("/orders");
       }, 1500);
@@ -146,24 +171,24 @@ export default function CheckoutProductPage() {
       <div className="checkout-page">
         <div className="checkout-loading">
           <div className="checkout-spinner"></div>
-          <p>Memuat produk...</p>
+          <p>Memuat data...</p>
         </div>
       </div>
     );
   }
 
   /* =======================
-     NOT FOUND STATE
+     EMPTY STATE
   ======================= */
-  if (!product) {
+  if (!cartItems.length) {
     return (
       <div className="checkout-page">
         <div className="checkout-empty">
-          <div className="checkout-empty-icon">😕</div>
-          <h2>Produk Tidak Ditemukan</h2>
-          <p>Maaf, produk yang kamu cari tidak tersedia.</p>
+          <div className="checkout-empty-icon">🛒</div>
+          <h2>Keranjang Kosong</h2>
+          <p>Yuk, mulai belanja dan temukan produk favoritmu!</p>
           <Link href="/">
-            <button className="btn btn-primary">🏠 Kembali ke Home</button>
+            <button className="btn btn-primary">🛍️ Mulai Belanja</button>
           </Link>
         </div>
       </div>
@@ -185,7 +210,7 @@ export default function CheckoutProductPage() {
           </button>
           <div className="checkout-header-text">
             <h1>Checkout</h1>
-            <p>Beli langsung</p>
+            <p>{totalItems} item di keranjang</p>
           </div>
           <div className="checkout-badge">✨ Gratis Ongkir</div>
         </div>
@@ -194,69 +219,37 @@ export default function CheckoutProductPage() {
       {/* Main Content */}
       <main className="checkout-main">
         
-        {/* Product Section */}
+        {/* Products Section */}
         <section className="checkout-card">
           <div className="checkout-card-header">
             <div className="checkout-card-icon">🛍️</div>
             <div>
-              <h2>Produk</h2>
-              <p>Detail barang yang dibeli</p>
+              <h2>Ringkasan Pesanan</h2>
+              <p>{totalItems} produk</p>
             </div>
           </div>
           
-          <div className="checkout-product-single">
-            <img
-              src={product.image_url || `https://picsum.photos/seed/${product.id}/120/120`}
-              alt={product.name}
-              className="checkout-product-image"
-              onError={(e) => {
-                (e.target as HTMLImageElement).src = `https://picsum.photos/seed/${product.id}/120/120`;
-              }}
-            />
-            <div className="checkout-product-info">
-              <h3>{product.name}</h3>
-              <p className="checkout-product-category">{product.category}</p>
-              <div className="checkout-product-rating">
-                <span>⭐</span>
-                <span>{product.rating}</span>
+          <div className="checkout-items">
+            {cartItems.map((item, index) => (
+              <div key={item.id} className="checkout-item" style={{ animationDelay: `${index * 0.1}s` }}>
+                <img
+                  src={item.products.image_url || `https://picsum.photos/seed/${item.product_id}/80/80`}
+                  alt={item.products.name}
+                  className="checkout-item-image"
+                  onError={(e) => {
+                    (e.target as HTMLImageElement).src = `https://picsum.photos/seed/${item.product_id}/80/80`;
+                  }}
+                />
+                <div className="checkout-item-details">
+                  <h3>{item.products.name}</h3>
+                  <p className="checkout-item-category">{item.products.category}</p>
+                  <div className="checkout-item-bottom">
+                    <span className="checkout-item-price">Rp {formatPrice(item.products.price)}</span>
+                    <span className="checkout-item-qty">x{item.quantity}</span>
+                  </div>
+                </div>
               </div>
-              <p className="checkout-product-price">Rp {formatPrice(product.price)}</p>
-            </div>
-          </div>
-
-          {/* Quantity Selector */}
-          <div className="checkout-quantity-section">
-            <label>Jumlah</label>
-            <div className="checkout-quantity-control">
-              <button 
-                onClick={() => setQty(Math.max(1, qty - 1))}
-                disabled={qty <= 1}
-                className="checkout-qty-btn"
-              >
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <line x1="5" y1="12" x2="19" y2="12"/>
-                </svg>
-              </button>
-              <input 
-                type="number" 
-                min={1} 
-                max={product.stock}
-                value={qty} 
-                onChange={e => setQty(Math.max(1, Math.min(product.stock, Number(e.target.value))))}
-                className="checkout-qty-input"
-              />
-              <button 
-                onClick={() => setQty(Math.min(product.stock, qty + 1))}
-                disabled={qty >= product.stock}
-                className="checkout-qty-btn"
-              >
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <line x1="12" y1="5" x2="12" y2="19"/>
-                  <line x1="5" y1="12" x2="19" y2="12"/>
-                </svg>
-              </button>
-            </div>
-            <span className="checkout-stock-info">Stok: {product.stock}</span>
+            ))}
           </div>
         </section>
 
@@ -306,7 +299,7 @@ export default function CheckoutProductPage() {
           
           <div className="order-summary">
             <div className="order-summary-row">
-              <span>Subtotal ({qty} produk)</span>
+              <span>Subtotal ({totalItems} produk)</span>
               <span>Rp {formatPrice(subtotal)}</span>
             </div>
             <div className="order-summary-row">

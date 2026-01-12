@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { orders } from "../../_store";
+import { supabase } from "@/lib/supabase";
 
 export async function GET(
   req: Request,
@@ -7,9 +7,22 @@ export async function GET(
 ) {
   const { id } = await ctx.params;
 
-  const order = orders.find(o => o.id === Number(id));
+  const { data: order, error } = await supabase
+    .from("orders")
+    .select(`
+      *,
+      order_items (
+        id,
+        product_id,
+        quantity,
+        price_at_purchase,
+        name_snapshot
+      )
+    `)
+    .eq("id", Number(id))
+    .single();
 
-  if (!order) {
+  if (error || !order) {
     return NextResponse.json(
       { success: false, message: "Order not found" },
       { status: 404 }
@@ -18,6 +31,6 @@ export async function GET(
 
   return NextResponse.json({
     success: true,
-    data: order
+    data: order,
   });
 }

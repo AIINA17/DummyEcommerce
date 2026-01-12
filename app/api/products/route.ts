@@ -1,43 +1,87 @@
-import { NextResponse } from "next/server";
-import products from "../../../data/products.json";
+import { NextRequest, NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
 
-export async function GET(req: Request) {
-  const { searchParams } = new URL(req.url);
+// Buat Supabase client
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+);
 
-  const q = searchParams.get("q")?.toLowerCase() || "";
-  const category = searchParams.get("category") || "";
-  const min = Number(searchParams.get("min") || 0);
-  const max = Number(searchParams.get("max") || 999999999);
-  const rating = Number(searchParams.get("rating") || 0);
-  const sort = searchParams.get("sort") || "";
+export async function GET(request: NextRequest) {
+  try {
+    // Ambil query parameters
+    const { searchParams } = new URL(request.url);
+    const q = searchParams.get("q")?.toLowerCase() || "";
+    const category = searchParams.get("category") || "";
+    const min = searchParams.get("min") || "";
+    const max = searchParams.get("max") || "";
+    const rating = searchParams.get("rating") || "";
+    const sort = searchParams.get("sort") || "";
 
-  let result = [...(products as any[])];
+    // Mulai query ke Supabase
+    let query = supabase.from("products").select("*");
 
-  // SEARCH
-  if (q) {
-    result = result.filter(p =>
-      p.name.toLowerCase().includes(q)
-    );
+    // Filter by search query (nama produk)
+    if (q) {
+      query = query.ilike("name", `%${q}%`);
+    }
+
+    // Filter by category
+    if (category) {
+      query = query.eq("category", category);
+    }
+
+    // Filter by min price
+    if (min) {
+      query = query.gte("price", parseInt(min));
+    }
+
+    // Filter by max price
+    if (max) {
+      query = query.lte("price", parseInt(max));
+    }
+
+    // Filter by minimum rating
+    if (rating) {
+      query = query.gte("rating", parseFloat(rating));
+    }
+
+    // Sorting
+    switch (sort) {
+      case "price_asc":
+        query = query.order("price", { ascending: true });
+        break;
+      case "price_desc":
+        query = query.order("price", { ascending: false });
+        break;
+      case "rating_desc":
+        query = query.order("rating", { ascending: false });
+        break;
+      default:
+        query = query.order("id", { ascending: true });
+    }
+
+    // Execute query
+    const { data, error } = await query;
+
+    if (error) {
+      console.error("Supabase error:", error);
+      return NextResponse.json({ 
+        success: false, 
+        error: error.message 
+      }, { status: 500 });
+    }
+
+    return NextResponse.json({ 
+      success: true, 
+      data: data || [] 
+    });
+
+  } catch (error) {
+    console.error("Server error:", error);
+    return NextResponse.json({ 
+      success: false, 
+      error: "Internal server error" 
+    }, { status: 500 });
   }
-
-  // CATEGORY FILTER
-  if (category) {
-    result = result.filter(p => p.category === category);
-  }
-
-  // PRICE RANGE FILTER
-  result = result.filter(p => p.price >= min && p.price <= max);
-
-  // RATING FILTER
-  result = result.filter(p => p.rating >= rating);
-
-  // SORTING
-  if (sort === "price_asc") result.sort((a, b) => a.price - b.price);
-  if (sort === "price_desc") result.sort((a, b) => b.price - a.price);
-  if (sort === "rating_desc") result.sort((a, b) => b.rating - a.rating);
-
-  return NextResponse.json({
-    success: true,
-    data: result
-  });
 }
