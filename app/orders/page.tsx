@@ -5,271 +5,407 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 
+/* =======================
+    TYPES
+======================= */
 interface OrderItem {
-    id: number;
-    product_id: number;
-    quantity: number;
-    price_at_purchase: number;
-    name_snapshot: string;
+  id: number;
+  product_id: number;
+  quantity: number;
+  price_at_purchase: number;
+  name_snapshot: string;
 }
 
 interface Order {
-    id: number;
-    user_id: number;
-    status: string;
-    payment_method: string;
-    total: number;
-    created_at: string;
-    order_items: OrderItem[];
+  id: number;
+  user_id: number;
+  status: string;
+  payment_method: string;
+  total: number;
+  created_at: string;
+  order_items: OrderItem[];
 }
 
+/* =======================
+    CONSTANTS
+======================= */
+const TABS = [
+  { id: "semua", label: "Semua" },
+  { id: "pending", label: "Pending" },
+  { id: "proses", label: "Proses" },
+  { id: "selesai", label: "Selesai" },
+] as const;
+
+const STATUS_CONFIG: Record<string, { label: string; color: string; icon: string }> = {
+  paid: { label: "Dibayar", color: "text-success", icon: "✅" },
+  shipped: { label: "Dikirim", color: "text-info", icon: "🚚" },
+  completed: { label: "Selesai", color: "text-success", icon: "🎉" },
+  cancelled: { label: "Dibatalkan", color: "text-error", icon: "❌" },
+  default: { label: "Menunggu", color: "text-warning", icon: "⏳" },
+};
+
+const PAYMENT_ICONS: Record<string, string> = {
+  gopay: "💚",
+  ovo: "💜",
+  shopee: "🧡",
+  dana: "💙",
+  va: "🏦",
+  default: "💳",
+};
+
+/* =======================
+    HELPER FUNCTIONS
+======================= */
+const formatPrice = (price: number) => new Intl.NumberFormat("id-ID").format(price);
+
+const formatDate = (dateString: string) =>
+  new Date(dateString).toLocaleDateString("id-ID", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+
+const getStatusInfo = (status: string) =>
+  STATUS_CONFIG[status] || STATUS_CONFIG.default;
+
+const getPaymentIcon = (method: string) => {
+  const methodLower = method?.toLowerCase() || "";
+  const iconKey = Object.keys(PAYMENT_ICONS).find(key => methodLower.includes(key));
+  return PAYMENT_ICONS[iconKey || "default"];
+};
+
+/* =======================
+    MAIN COMPONENT
+======================= */
 export default function OrdersPage() {
-    const router = useRouter();
-    const { data: session, status } = useSession();
-    const [orders, setOrders] = useState<Order[]>([]);
-    const [loading, setLoading] = useState(true);
+  const router = useRouter();
+  const { data: session, status } = useSession();
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<typeof TABS[number]["id"]>("semua");
 
-    const userId = session?.user?.id ? Number(session.user.id) : null;
+  const userId = session?.user?.id ? Number(session.user.id) : null;
 
-    async function loadOrders() {
-        if (!userId) return;
-        try {
-            const res = await fetch(`/api/orders?user_id=${userId}`);
-            const data = await res.json();
-            setOrders(data.data || []);
-        } catch (error) {
-            console.error("Error loading orders:", error);
-        } finally {
-            setLoading(false);
-        }
+  const loadOrders = async () => {
+    if (!userId) return;
+    try {
+      const res = await fetch(`/api/orders?user_id=${userId}`);
+      const { data } = await res.json();
+      setOrders(data || []);
+    } catch (error) {
+      console.error("Error loading orders:", error);
+    } finally {
+      setLoading(false);
     }
+  };
 
-    useEffect(() => {
-        if (status === "unauthenticated") {
-            router.push("/login");
-            return;
-        }
-
-        if (status !== "authenticated" || !userId) return;
-
-        setLoading(true);
-        loadOrders();
-        const interval = setInterval(loadOrders, 5000);
-        return () => clearInterval(interval);
-    }, [status, userId]);
-
-    function formatDate(dateString: string) {
-        return new Date(dateString).toLocaleDateString("id-ID", {
-            day: "numeric",
-            month: "short",
-            year: "numeric",
-            hour: "2-digit",
-            minute: "2-digit",
-        });
+  useEffect(() => {
+    if (status === "unauthenticated") {
+      router.push("/login");
+      return;
     }
-
-    function getStatusBadge(status: string) {
-        switch (status) {
-            case "paid":
-                return (
-                    <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm font-medium bg-green-100 text-green-700">
-                        <span className="w-2 h-2 rounded-full bg-green-500"></span>
-                        Dibayar
-                    </span>
-                );
-            case "shipped":
-                return (
-                    <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-700">
-                        <span className="w-2 h-2 rounded-full bg-blue-500"></span>
-                        Dikirim
-                    </span>
-                );
-            case "completed":
-                return (
-                    <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm font-medium bg-gray-100 text-gray-700">
-                        <span className="w-2 h-2 rounded-full bg-gray-500"></span>
-                        Selesai
-                    </span>
-                );
-            case "cancelled":
-                return (
-                    <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm font-medium bg-red-100 text-red-700">
-                        <span className="w-2 h-2 rounded-full bg-red-500"></span>
-                        Dibatalkan
-                    </span>
-                );
-            default:
-                return (
-                    <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm font-medium bg-yellow-100 text-yellow-700">
-                        <span className="w-2 h-2 rounded-full bg-yellow-500"></span>
-                        Menunggu Pembayaran
-                    </span>
-                );
-        }
+    if (status === "authenticated" && userId) {
+      loadOrders();
+      const interval = setInterval(loadOrders, 10000);
+      return () => clearInterval(interval);
     }
+  }, [status, userId]);
 
-    function getPaymentIcon(method: string) {
-        if (method?.includes("BCA")) return "🏦";
-        if (method?.includes("BRI")) return "🏦";
-        if (method?.includes("Mandiri")) return "🏦";
-        if (method?.includes("GoPay")) return "💚";
-        if (method?.includes("OVO")) return "💜";
-        if (method?.includes("ShopeePay")) return "🧡";
-        if (method?.includes("DANA")) return "💙";
-        return "💳";
+  const filteredOrders = orders.filter((order) => {
+    switch (activeTab) {
+      case "pending":
+        return order.status === "pending" || order.status === "waiting";
+      case "proses":
+        return order.status === "paid" || order.status === "shipped";
+      case "selesai":
+        return order.status === "completed";
+      default:
+        return true;
     }
+  });
 
-    if (loading) {
-        return (
-            <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-                <div className="animate-spin rounded-full h-12 w-12 border-4 border-[#EE4D2D] border-t-transparent"></div>
-            </div>
-        );
-    }
-
+  /* =======================
+      RENDER STATES
+  ======================= */
+  if (loading) {
     return (
-        <div className="min-h-screen bg-gray-50">
-            {/* Header */}
-            <div className="bg-white shadow-sm sticky top-0 z-10">
-                <div className="max-w-4xl mx-auto px-4 py-4">
-                    <div className="flex items-center gap-4">
-                        <Link
-                            href="/"
-                            className="text-gray-600 hover:text-[#EE4D2D]">
-                            <svg
-                                xmlns="http://www.w3.org/2000/svg"
-                                className="h-6 w-6"
-                                fill="none"
-                                viewBox="0 0 24 24"
-                                stroke="currentColor">
-                                <path
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                    strokeWidth={2}
-                                    d="M15 19l-7-7 7-7"
-                                />
-                            </svg>
-                        </Link>
-                        <h1 className="text-xl font-semibold text-gray-800">
-                            Pesanan Saya
-                        </h1>
-                    </div>
-                </div>
-            </div>
-
-            <div className="max-w-4xl mx-auto px-4 py-6">
-                {orders.length === 0 ? (
-                    <div className="bg-white rounded-lg shadow-sm p-8 text-center">
-                        <div className="text-6xl mb-4">📦</div>
-                        <h2 className="text-xl font-semibold text-gray-800 mb-2">
-                            Belum Ada Pesanan
-                        </h2>
-                        <p className="text-gray-500 mb-6">
-                            Yuk mulai belanja dan buat pesanan pertamamu!
-                        </p>
-                        <Link
-                            href="/"
-                            className="inline-block bg-[#EE4D2D] text-white px-6 py-3 rounded-lg hover:bg-[#D73211] transition-colors">
-                            Mulai Belanja
-                        </Link>
-                    </div>
-                ) : (
-                    <div className="space-y-4">
-                        {orders.map((order) => (
-                            <div
-                                key={order.id}
-                                className="bg-white rounded-lg shadow-sm overflow-hidden">
-                                {/* Order Header */}
-                                <div className="p-4 border-b border-gray-100">
-                                    <div className="flex items-center justify-between flex-wrap gap-2">
-                                        <div className="flex items-center gap-3">
-                                            <span className="text-sm text-gray-500">
-                                                Order #{order.id}
-                                            </span>
-                                            <span className="text-gray-300">
-                                                •
-                                            </span>
-                                            <span className="text-sm text-gray-500">
-                                                {formatDate(order.created_at)}
-                                            </span>
-                                        </div>
-                                        {getStatusBadge(order.status)}
-                                    </div>
-                                </div>
-
-                                {/* Order Items */}
-                                <div className="p-4 space-y-3">
-                                    {order.order_items?.map((item) => (
-                                        <div
-                                            key={item.id}
-                                            className="flex items-center gap-4">
-                                            <div className="w-16 h-16 bg-gray-100 rounded-lg overflow-hidden flex-shrink-0">
-                                                <img
-                                                    src={`https://picsum.photos/seed/${item.product_id}/100/100`}
-                                                    alt={item.name_snapshot}
-                                                    className="w-full h-full object-cover"
-                                                />
-                                            </div>
-                                            <div className="flex-1 min-w-0">
-                                                <h3 className="font-medium text-gray-800 truncate">
-                                                    {item.name_snapshot}
-                                                </h3>
-                                                <p className="text-sm text-gray-500">
-                                                    x{item.quantity}
-                                                </p>
-                                            </div>
-                                            <div className="text-right">
-                                                <p className="font-semibold text-gray-800">
-                                                    Rp{" "}
-                                                    {(
-                                                        item.price_at_purchase *
-                                                        item.quantity
-                                                    ).toLocaleString("id-ID")}
-                                                </p>
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-
-                                {/* Order Footer */}
-                                <div className="p-4 bg-gray-50 border-t border-gray-100">
-                                    <div className="flex items-center justify-between flex-wrap gap-3">
-                                        <div className="flex items-center gap-2 text-sm text-gray-600">
-                                            <span>
-                                                {getPaymentIcon(
-                                                    order.payment_method
-                                                )}
-                                            </span>
-                                            <span>
-                                                {order.payment_method ||
-                                                    "Belum dipilih"}
-                                            </span>
-                                        </div>
-                                        <div className="flex items-center gap-4">
-                                            <div className="text-right">
-                                                <p className="text-sm text-gray-500">
-                                                    Total Pesanan
-                                                </p>
-                                                <p className="text-lg font-bold text-[#EE4D2D]">
-                                                    Rp{" "}
-                                                    {order.total.toLocaleString(
-                                                        "id-ID"
-                                                    )}
-                                                </p>
-                                            </div>
-                                            <Link
-                                                href={`/order/${order.id}`}
-                                                className="bg-[#EE4D2D] text-white px-4 py-2 rounded-lg hover:bg-[#D73211] transition-colors text-sm font-medium">
-                                                Detail
-                                            </Link>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                )}
-            </div>
+      <div className="checkout-page">
+        <div className="checkout-loading">
+          <div className="checkout-spinner"></div>
+          <p>Memuat daftar pesanan...</p>
         </div>
+      </div>
     );
+  }
+
+  if (orders.length === 0) {
+    return (
+      <div className="checkout-page">
+        <div className="checkout-empty">
+          <div className="checkout-empty-icon">📦</div>
+          <h2>Belum Ada Pesanan</h2>
+          <p>Sepertinya kamu belum berbelanja apapun hari ini.</p>
+          <Link href="/">
+            <button className="btn btn-primary">🛍️ Cari Produk</button>
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="checkout-page">
+      {/* Header */}
+      <header className="checkout-header">
+        <div className="checkout-header-content">
+          <button
+            onClick={() => router.push("/")}
+            className="checkout-back-btn"
+            aria-label="Kembali ke beranda"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M19 12H5M12 19l-7-7 7-7" />
+            </svg>
+          </button>
+          <div className="checkout-header-text">
+            <h1>Pesanan Saya</h1>
+            <p>{orders.length} transaksi ditemukan</p>
+          </div>
+          <div className="checkout-badge">🕒 Update Otomatis</div>
+        </div>
+      </header>
+
+      {/* Main Content */}
+      <main className="checkout-main">
+        {/* Tabs Navigation */}
+        <nav className="orders-tabs" aria-label="Filter status pesanan">
+          {TABS.map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`order-tab-item ${activeTab === tab.id ? "active" : ""}`}
+              aria-pressed={activeTab === tab.id}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </nav>
+
+        {/* Orders List */}
+        <div className="orders-list">
+          {filteredOrders.length === 0 ? (
+            <div className="checkout-empty" style={{ padding: "40px" }}>
+              <p>Tidak ada pesanan di kategori ini</p>
+            </div>
+          ) : (
+            filteredOrders.map((order, index) => {
+              const statusInfo = getStatusInfo(order.status);
+              return (
+                <section
+                  key={order.id}
+                  className="checkout-card order-card"
+                  style={{ animationDelay: `${index * 0.05}s` }}
+                >
+                  {/* Card Header: Order ID & Status */}
+                  <div className="order-card-header">
+                    <div className="order-meta">
+                      <span className="order-number">ORD-{order.id}</span>
+                      <span className="order-date">{formatDate(order.created_at)}</span>
+                    </div>
+                    <div className={`order-status-badge ${statusInfo.color}`}>
+                      {statusInfo.icon} {statusInfo.label}
+                    </div>
+                  </div>
+
+                  {/* Items Preview */}
+                  <div className="checkout-items">
+                    {order.order_items.map((item) => (
+                      <div key={item.id} className="checkout-item">
+                        <div className="checkout-item-image-container">
+                          <img
+                            src={`https://picsum.photos/seed/${item.product_id}/80/80`}
+                            alt={item.name_snapshot}
+                            className="checkout-item-image"
+                            loading="lazy"
+                          />
+                        </div>
+                        <div className="checkout-item-details">
+                          <h3>{item.name_snapshot}</h3>
+                          <div className="checkout-item-bottom">
+                            <span className="checkout-item-price">
+                              Rp {formatPrice(item.price_at_purchase)}
+                            </span>
+                            <span className="checkout-item-qty">x{item.quantity}</span>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Card Footer: Payment & Total */}
+                  <div className="order-footer">
+                    <div className="order-payment-method">
+                      <span className="method-icon">{getPaymentIcon(order.payment_method)}</span>
+                      <span>{order.payment_method}</span>
+                    </div>
+                    <div className="order-total-section">
+                      <p>Total Pesanan</p>
+                      <h2 className="order-total-price">Rp {formatPrice(order.total)}</h2>
+                    </div>
+                  </div>
+
+                  <Link href={`/order/${order.id}`}>
+                    <button className="btn btn-secondary w-full mt-3" style={{ fontSize: "0.85rem" }}>
+                      Lihat Detail Pesanan
+                    </button>
+                  </Link>
+                </section>
+              );
+            })
+          )}
+        </div>
+      </main>
+
+      <style jsx>{`
+        /* Tabs */
+        .orders-tabs {
+          display: flex;
+          background: white;
+          border-radius: 12px;
+          padding: 4px;
+          margin-bottom: 24px;
+          gap: 4px;
+          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+        }
+
+        .order-tab-item {
+          flex: 1;
+          padding: 12px;
+          border: none;
+          border-radius: 8px;
+          font-size: 0.9rem;
+          font-weight: 600;
+          color: #666;
+          background: transparent;
+          cursor: pointer;
+          transition: all 0.2s ease;
+        }
+
+        .order-tab-item:hover {
+          background: #f5f5f5;
+        }
+
+        .order-tab-item.active {
+          background: #ee4d2d;
+          color: white;
+          box-shadow: 0 2px 4px rgba(238, 77, 45, 0.3);
+        }
+
+        /* Order Card Header */
+        .order-card-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: flex-start;
+          padding-bottom: 12px;
+          margin-bottom: 16px;
+          border-bottom: 1px solid #f0f0f0;
+        }
+
+        .order-meta {
+          display: flex;
+          flex-direction: column;
+          gap: 4px;
+        }
+
+        .order-number {
+          font-weight: 700;
+          color: #333;
+          font-size: 0.95rem;
+        }
+
+        .order-date {
+          font-size: 0.75rem;
+          color: #888;
+        }
+
+        .order-status-badge {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          font-weight: 600;
+          font-size: 0.8rem;
+          padding: 6px 12px;
+          border-radius: 20px;
+          background: #f8f9fa;
+          white-space: nowrap;
+        }
+
+        /* Order Footer */
+        .order-footer {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin-top: 20px;
+          padding-top: 16px;
+          border-top: 1px dashed #eee;
+        }
+
+        .order-payment-method {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          font-size: 0.85rem;
+          color: #666;
+        }
+
+        .order-total-section {
+          text-align: right;
+        }
+
+        .order-total-section p {
+          font-size: 0.75rem;
+          color: #888;
+          margin: 0 0 4px 0;
+        }
+
+        .order-total-price {
+          margin: 0;
+          font-size: 1.2rem;
+          font-weight: 800;
+          color: #ee4d2d;
+        }
+
+        /* Utility Classes */
+        .text-primary {
+          color: #ee4d2d;
+        }
+
+        .text-success {
+          color: #2ecc71;
+        }
+
+        .text-error {
+          color: #e74c3c;
+        }
+
+        .text-warning {
+          color: #f1c40f;
+        }
+
+        .text-info {
+          color: #3498db;
+        }
+
+        .w-full {
+          width: 100%;
+        }
+
+        .mt-3 {
+          margin-top: 12px;
+        }
+      `}</style>
+    </div>
+  );
 }

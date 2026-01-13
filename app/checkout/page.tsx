@@ -35,6 +35,7 @@ const PAYMENT_METHODS = [
   { value: "OVO", label: "OVO", desc: "Cashback s.d 10%", icon: "💜" },
   { value: "ShopeePay", label: "ShopeePay", desc: "Promo eksklusif", icon: "🧡" },
   { value: "DANA", label: "DANA", desc: "Bayar praktis", icon: "💙" },
+  { value: "ShopKuPay", label: "ShopKuPay", desc: "Bayar praktis", icon: "❤️" },
 ];
 
 /* =======================

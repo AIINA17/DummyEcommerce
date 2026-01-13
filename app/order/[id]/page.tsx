@@ -1,9 +1,12 @@
 "use client";
 
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 
+/* =======================
+    TYPES
+======================= */
 interface OrderItem {
   id: number;
   product_id: number;
@@ -25,11 +28,12 @@ interface Order {
 
 export default function OrderDetail() {
   const { id } = useParams();
+  const router = useRouter();
   const [order, setOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(true);
   const [paying, setPaying] = useState(false);
 
-  async function loadOrder() {
+  const loadOrder = async () => {
     try {
       const res = await fetch(`/api/orders/${id}`);
       const data = await res.json();
@@ -39,16 +43,15 @@ export default function OrderDetail() {
     } finally {
       setLoading(false);
     }
-  }
+  };
 
   useEffect(() => {
     loadOrder();
-    // Auto refresh every 5 seconds
-    const interval = setInterval(loadOrder, 5000);
+    const interval = setInterval(loadOrder, 10000);
     return () => clearInterval(interval);
   }, [id]);
 
-  async function handlePay() {
+  const handlePay = async () => {
     setPaying(true);
     try {
       await fetch(`/api/orders/${id}/pay`, { method: "POST" });
@@ -58,191 +61,184 @@ export default function OrderDetail() {
     } finally {
       setPaying(false);
     }
-  }
+  };
 
-  function formatDate(dateString: string) {
-    return new Date(dateString).toLocaleDateString("id-ID", {
-      weekday: "long",
-      day: "numeric",
-      month: "long",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  }
+  /* =======================
+      HELPERS
+  ======================= */
+  const formatPrice = (p: number) => new Intl.NumberFormat("id-ID").format(p);
 
-  function getStatusInfo(status: string) {
+  const getStatusConfig = (status: string) => {
     switch (status) {
-      case "paid":
-        return { label: "Dibayar", color: "bg-green-100 text-green-700", icon: "✓" };
-      case "shipped":
-        return { label: "Dikirim", color: "bg-blue-100 text-blue-700", icon: "🚚" };
-      case "completed":
-        return { label: "Selesai", color: "bg-gray-100 text-gray-700", icon: "📦" };
-      case "cancelled":
-        return { label: "Dibatalkan", color: "bg-red-100 text-red-700", icon: "✕" };
-      default:
-        return { label: "Menunggu Pembayaran", color: "bg-yellow-100 text-yellow-700", icon: "⏳" };
+      case "paid": return { label: "Dibayar", color: "text-success", icon: "✅" };
+      case "shipped": return { label: "Dikirim", color: "text-info", icon: "🚚" };
+      case "completed": return { label: "Selesai", color: "text-success", icon: "🎉" };
+      case "cancelled": return { label: "Dibatalkan", color: "text-error", icon: "❌" };
+      default: return { label: "Menunggu Pembayaran", color: "text-warning", icon: "⏳" };
     }
-  }
-
-  function getPaymentIcon(method: string) {
-    if (method?.includes("BCA")) return "🏦";
-    if (method?.includes("BRI")) return "🏦";
-    if (method?.includes("Mandiri")) return "🏦";
-    if (method?.includes("GoPay")) return "💚";
-    if (method?.includes("OVO")) return "💜";
-    if (method?.includes("ShopeePay")) return "🧡";
-    if (method?.includes("DANA")) return "💙";
-    return "💳";
-  }
+  };
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-4 border-[#EE4D2D] border-t-transparent"></div>
+      <div className="checkout-page">
+        <div className="checkout-loading">
+          <div className="checkout-spinner"></div>
+          <p>Memuat rincian pesanan...</p>
+        </div>
       </div>
     );
   }
 
   if (!order) {
     return (
-      <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4">
-        <div className="text-6xl mb-4">😕</div>
-        <h2 className="text-xl font-semibold text-gray-800 mb-2">Pesanan Tidak Ditemukan</h2>
-        <Link href="/orders" className="text-[#EE4D2D] hover:underline">
-          ← Kembali ke Pesanan
-        </Link>
+      <div className="checkout-page">
+        <div className="checkout-empty">
+          <div className="checkout-empty-icon">❌</div>
+          <h2>Pesanan Tidak Ada</h2>
+          <Link href="/orders"><button className="btn btn-primary mt-4">Kembali</button></Link>
+        </div>
       </div>
     );
   }
 
-  const statusInfo = getStatusInfo(order.status);
+  const statusInfo = getStatusConfig(order.status);
 
   return (
-    <div className="min-h-screen bg-gray-50 pb-32">
+    <div className="checkout-page">
       {/* Header */}
-      <div className="bg-white shadow-sm sticky top-0 z-10">
-        <div className="max-w-4xl mx-auto px-4 py-4">
-          <div className="flex items-center gap-4">
-            <Link href="/orders" className="text-gray-600 hover:text-[#EE4D2D]">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-              </svg>
-            </Link>
-            <h1 className="text-xl font-semibold text-gray-800">Detail Pesanan</h1>
+      <header className="checkout-header">
+        <div className="checkout-header-content">
+          <button onClick={() => router.push("/orders")} className="checkout-back-btn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M19 12H5M12 19l-7-7 7-7"/>
+            </svg>
+          </button>
+          <div className="checkout-header-text">
+            <h1>Rincian Pesanan</h1>
+            <p>ID Transaksi: ORD-{order.id}</p>
+          </div>
+          <div className={`status-badge-detail ${statusInfo.color}`}>
+            {statusInfo.icon} {statusInfo.label}
           </div>
         </div>
-      </div>
+      </header>
 
-      <div className="max-w-4xl mx-auto px-4 py-6 space-y-4">
-        {/* Order Status Card */}
-        <div className="bg-white rounded-lg shadow-sm p-4">
-          <div className="flex items-center justify-between mb-4">
-            <span className="text-sm text-gray-500">Order #{order.id}</span>
-            <span className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-sm font-medium ${statusInfo.color}`}>
-              <span>{statusInfo.icon}</span>
-              {statusInfo.label}
-            </span>
+      <main className="checkout-main">
+        {/* Order Status Section */}
+        <section className="checkout-card">
+          <div className="checkout-card-header">
+            <div className="checkout-card-icon">📄</div>
+            <div>
+              <h2>Informasi Pesanan</h2>
+              <p>Waktu Pemesanan: {new Date(order.created_at).toLocaleString("id-ID")}</p>
+            </div>
           </div>
-          <p className="text-sm text-gray-500">{formatDate(order.created_at)}</p>
-        </div>
+        </section>
 
-        {/* Items Card */}
-        <div className="bg-white rounded-lg shadow-sm p-4">
-          <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-4">
-            Produk Dipesan ({order.order_items?.length || 0} item)
-          </h2>
-          <div className="space-y-4">
-            {order.order_items?.map((item) => (
-              <div key={item.id} className="flex gap-4 pb-4 border-b border-gray-100 last:border-0 last:pb-0">
-                <div className="w-16 h-16 bg-gray-100 rounded-lg overflow-hidden flex-shrink-0">
-                  <img
-                    src={`https://picsum.photos/seed/${item.product_id}/100/100`}
-                    alt={item.name_snapshot}
-                    className="w-full h-full object-cover"
-                  />
+        {/* Items Section */}
+        <section className="checkout-card">
+          <div className="checkout-card-header">
+            <div className="checkout-card-icon">🛍️</div>
+            <div>
+              <h2>Produk Dipesan</h2>
+              <p>{order.order_items.length} item dalam pesanan ini</p>
+            </div>
+          </div>
+          <div className="checkout-items">
+            {order.order_items.map((item) => (
+              <div key={item.id} className="checkout-item">
+                <img 
+                   src={`https://picsum.photos/seed/${item.product_id}/80/80`} 
+                   alt={item.name_snapshot} 
+                   className="checkout-item-image" 
+                />
+                <div className="checkout-item-details">
+                  <h3>{item.name_snapshot}</h3>
+                  <div className="checkout-item-bottom">
+                    <span className="checkout-item-price">Rp {formatPrice(item.price_at_purchase)}</span>
+                    <span className="checkout-item-qty">x{item.quantity}</span>
+                  </div>
                 </div>
-                <div className="flex-1 min-w-0">
-                  <h3 className="font-medium text-gray-800">{item.name_snapshot}</h3>
-                  <p className="text-sm text-gray-500">x{item.quantity}</p>
-                  <p className="text-[#EE4D2D] font-semibold mt-1">
-                    Rp {item.price_at_purchase.toLocaleString("id-ID")}
-                  </p>
-                </div>
-                <div className="text-right">
-                  <p className="font-semibold text-gray-800">
-                    Rp {(item.price_at_purchase * item.quantity).toLocaleString("id-ID")}
-                  </p>
+                <div className="item-total-price">
+                   Rp {formatPrice(item.price_at_purchase * item.quantity)}
                 </div>
               </div>
             ))}
           </div>
-        </div>
+        </section>
 
-        {/* Payment Info Card */}
-        <div className="bg-white rounded-lg shadow-sm p-4">
-          <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-4">Informasi Pembayaran</h2>
-          <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
-            <span className="text-2xl">{getPaymentIcon(order.payment_method)}</span>
+        {/* Payment Detail Section */}
+        <section className="checkout-card">
+          <div className="checkout-card-header">
+            <div className="checkout-card-icon">💳</div>
             <div>
-              <p className="font-medium text-gray-800">{order.payment_method}</p>
-              <p className="text-sm text-gray-500">Metode pembayaran</p>
+              <h2>Metode Pembayaran</h2>
+              <p>{order.payment_method}</p>
             </div>
           </div>
-        </div>
-
-        {/* Order Summary Card */}
-        <div className="bg-white rounded-lg shadow-sm p-4">
-          <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-4">Ringkasan Pembayaran</h2>
-          <div className="space-y-2">
-            <div className="flex justify-between text-gray-600">
-              <span>Subtotal Produk</span>
-              <span>Rp {order.total.toLocaleString("id-ID")}</span>
+          <div className="order-summary mt-2">
+            <div className="order-summary-row">
+              <span>Total Harga Produk</span>
+              <span>Rp {formatPrice(order.total)}</span>
             </div>
-            <div className="flex justify-between text-gray-600">
+            <div className="order-summary-row">
               <span>Ongkos Kirim</span>
-              <span className="text-green-600">Gratis</span>
+              <span className="text-success">Gratis</span>
             </div>
-            <div className="flex justify-between text-gray-600">
-              <span>Biaya Layanan</span>
-              <span>Rp 0</span>
-            </div>
-            <div className="border-t border-gray-200 pt-2 mt-2">
-              <div className="flex justify-between font-semibold text-lg">
-                <span>Total</span>
-                <span className="text-[#EE4D2D]">Rp {order.total.toLocaleString("id-ID")}</span>
-              </div>
+            <div className="order-summary-row total">
+              <span>Total Pembayaran</span>
+              <span className="text-primary font-bold">Rp {formatPrice(order.total)}</span>
             </div>
           </div>
-        </div>
-      </div>
+        </section>
+      </main>
 
-      {/* Fixed Bottom Button - Show only for pending orders */}
+      {/* Floating Bottom Action (Only for Pending) */}
       {order.status === "pending" && (
-        <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 p-4 shadow-lg">
-          <div className="max-w-4xl mx-auto flex items-center justify-between gap-4">
-            <div>
-              <p className="text-sm text-gray-500">Total Pembayaran</p>
-              <p className="text-xl font-bold text-[#EE4D2D]">Rp {order.total.toLocaleString("id-ID")}</p>
+        <div className="checkout-footer">
+          <div className="checkout-footer-content">
+            <div className="checkout-footer-total">
+              <p>Total yang harus dibayar</p>
+              <p className="checkout-footer-price">Rp {formatPrice(order.total)}</p>
             </div>
-            <button
-              onClick={handlePay}
-              disabled={paying}
-              className="bg-[#EE4D2D] hover:bg-[#D73211] disabled:bg-gray-400 text-white font-semibold px-8 py-3 rounded-lg transition-colors flex items-center gap-2"
+            <button 
+              onClick={handlePay} 
+              disabled={paying} 
+              className="btn btn-primary checkout-pay-btn"
             >
-              {paying ? (
-                <>
-                  <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent"></div>
-                  <span>Memproses...</span>
-                </>
-              ) : (
-                "Bayar Sekarang"
-              )}
+              {paying ? "Memproses..." : "Bayar Sekarang"}
             </button>
           </div>
         </div>
       )}
+
+      <style jsx>{`
+        .status-badge-detail {
+          background: #f8f9fa;
+          padding: 6px 14px;
+          border-radius: 50px;
+          font-weight: 700;
+          font-size: 0.85rem;
+          border: 1px solid #eee;
+        }
+        .item-total-price {
+          font-weight: 700;
+          color: #333;
+          font-size: 0.95rem;
+          min-width: 100px;
+          text-align: right;
+        }
+        .text-primary { color: #EE4D2D; }
+        .text-success { color: #2ecc71; }
+        .text-info { color: #3498db; }
+        .text-warning { color: #f1c40f; }
+        .text-error { color: #e74c3c; }
+        .font-bold { font-weight: 800; }
+        .mt-2 { margin-top: 10px; }
+        @media (max-width: 640px) {
+          .item-total-price { display: none; }
+        }
+      `}</style>
     </div>
   );
 }
