@@ -1,7 +1,8 @@
-    import { NextResponse } from "next/server";
+    import { NextRequest, NextResponse } from "next/server";
     import { supabase } from "@/lib/supabase";
     import { getServerSession } from "next-auth";
     import { authOptions } from "@/lib/auth";
+import { verifyToken } from "@/lib/jwt";
 
     function isRecord(value: unknown): value is Record<string, unknown> {
     return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -108,10 +109,10 @@
         );
         }
 
-        const product_id = toNumber(raw.product_id);
-        const quantity = toNumber(raw.quantity);
-        const price = toNumber(raw.price);
-        const name = typeof raw.name === "string" ? raw.name : null;
+    const product_id = toNumber(raw.product_id);
+    const quantity = toNumber(raw.quantity);
+    const price = toNumber(raw.price);
+    const name = typeof raw.name === "string" ? raw.name : null;
 
         if (!product_id || !quantity || !price || !name) {
         return NextResponse.json(
@@ -207,9 +208,9 @@
         name_snapshot: item.name,
     }));
 
-    const { error: itemsError } = await supabase
-        .from("order_items")
-        .insert(orderItems);
+  const { error: itemsError } = await supabase
+    .from("order_items")
+    .insert(orderItems);
 
     if (itemsError) {
         await supabase.from("orders").delete().eq("id", order.id);
