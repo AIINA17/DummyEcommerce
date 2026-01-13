@@ -1,18 +1,36 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { verifyToken } from "@/lib/jwt";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
 
+// Helper: Get user_id from JWT token OR query param
+function getUserId(req: NextRequest): number | null {
+  // 1. Check JWT token first
+  const jwtPayload = verifyToken(req);
+  if (jwtPayload?.userId) {
+    return jwtPayload.userId;
+  }
+
+  // 2. Fallback to query param
+  const { searchParams } = new URL(req.url);
+  const userIdParam = searchParams.get("user_id");
+  if (userIdParam) {
+    return parseInt(userIdParam);
+  }
+
+  return null;
+}
+
 // =====================================================
-// GET - Ambil data profile user
+// GET - Ambil data profile user (termasuk balance)
 // =====================================================
 export async function GET(request: NextRequest) {
   try {
-    const { searchParams } = new URL(request.url);
-    const userId = searchParams.get("user_id");
+    const userId = getUserId(request);
 
     if (!userId) {
       return NextResponse.json({ error: "user_id is required" }, { status: 400 });
@@ -20,8 +38,8 @@ export async function GET(request: NextRequest) {
 
     const { data, error } = await supabase
       .from("users")
-      .select("id, username, email, phone, address, avatar_url, created_at")
-      .eq("id", parseInt(userId))
+      .select("id, username, email, phone, address, avatar_url, balance, created_at")
+      .eq("id", userId)
       .single();
 
     if (error) {
@@ -33,7 +51,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
-    return NextResponse.json({ data });
+    return NextResponse.json({ success: true, data });
   } catch (error) {
     console.error("Server error:", error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
@@ -63,7 +81,7 @@ export async function PUT(request: NextRequest) {
       .from("users")
       .update(updateData)
       .eq("id", user_id)
-      .select("id, username, email, phone, address, avatar_url, created_at")
+      .select("id, username, email, phone, address, avatar_url, balance, created_at")
       .single();
 
     if (error) {
@@ -71,7 +89,7 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    return NextResponse.json({ data, message: "Profile updated successfully" });
+    return NextResponse.json({ success: true, data, message: "Profile updated successfully" });
   } catch (error) {
     console.error("Server error:", error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
