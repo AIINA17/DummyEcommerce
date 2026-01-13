@@ -1,21 +1,50 @@
+// FILE: app/api/cart/route.ts
+// Updated dengan JWT auth support (backward compatible)
+
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { verifyToken } from "@/lib/jwt";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
 
+// Helper: Get user_id from JWT token OR query param
+function getUserId(req: NextRequest, fromBody?: number): number | null {
+  // 1. Check JWT token first
+  const jwtPayload = verifyToken(req);
+  if (jwtPayload?.userId) {
+    return jwtPayload.userId;
+  }
+
+  // 2. Fallback to body (for backward compatibility)
+  if (fromBody) {
+    return fromBody;
+  }
+
+  // 3. Fallback to query param (for backward compatibility)
+  const { searchParams } = new URL(req.url);
+  const userIdParam = searchParams.get("user_id");
+  if (userIdParam) {
+    return parseInt(userIdParam);
+  }
+
+  return null;
+}
+
 // =====================================================
 // GET - Ambil semua item di cart user
 // =====================================================
 export async function GET(request: NextRequest) {
   try {
-    const { searchParams } = new URL(request.url);
-    const userId = searchParams.get("user_id");
+    const userId = getUserId(request);
 
     if (!userId) {
-      return NextResponse.json({ error: "user_id is required" }, { status: 400 });
+      return NextResponse.json(
+        { success: false, error: "user_id is required or provide valid token" },
+        { status: 400 }
+      );
     }
 
     // Ambil cart items dengan join ke tabel products
@@ -25,18 +54,18 @@ export async function GET(request: NextRequest) {
         *,
         products (*)
       `)
-      .eq("user_id", parseInt(userId))
+      .eq("user_id", userId)
       .order("created_at", { ascending: false });
 
     if (error) {
       console.error("Supabase error:", error);
-      return NextResponse.json({ error: error.message }, { status: 500 });
+      return NextResponse.json({ success: false, error: error.message }, { status: 500 });
     }
 
-    return NextResponse.json({ data: data || [] });
+    return NextResponse.json({ success: true, data: data || [] });
   } catch (error) {
     console.error("Server error:", error);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    return NextResponse.json({ success: false, error: "Internal server error" }, { status: 500 });
   }
 }
 
@@ -46,11 +75,21 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { user_id, product_id, quantity = 1 } = body;
+    const { product_id, quantity = 1 } = body;
 
-    if (!user_id || !product_id) {
+    // Get user_id from token or body
+    const userId = getUserId(request, body.user_id);
+
+    if (!userId) {
       return NextResponse.json(
-        { error: "user_id and product_id are required" },
+        { success: false, error: "user_id is required or provide valid token" },
+        { status: 400 }
+      );
+    }
+
+    if (!product_id) {
+      return NextResponse.json(
+        { success: false, error: "product_id is required" },
         { status: 400 }
       );
     }
@@ -59,7 +98,7 @@ export async function POST(request: NextRequest) {
     const { data: existing } = await supabase
       .from("cart")
       .select("*")
-      .eq("user_id", user_id)
+      .eq("user_id", userId)
       .eq("product_id", product_id)
       .single();
 
@@ -69,31 +108,31 @@ export async function POST(request: NextRequest) {
         .from("cart")
         .update({ quantity: existing.quantity + quantity })
         .eq("id", existing.id)
-        .select()
+        .select(`*, products (*)`)
         .single();
 
       if (error) {
-        return NextResponse.json({ error: error.message }, { status: 500 });
+        return NextResponse.json({ success: false, error: error.message }, { status: 500 });
       }
 
-      return NextResponse.json({ data, message: "Quantity updated" });
+      return NextResponse.json({ success: true, data, message: "Quantity updated" });
     } else {
       // Kalau belum ada, insert baru
       const { data, error } = await supabase
         .from("cart")
-        .insert({ user_id, product_id, quantity })
-        .select()
+        .insert({ user_id: userId, product_id, quantity })
+        .select(`*, products (*)`)
         .single();
 
       if (error) {
-        return NextResponse.json({ error: error.message }, { status: 500 });
+        return NextResponse.json({ success: false, error: error.message }, { status: 500 });
       }
 
-      return NextResponse.json({ data, message: "Added to cart" });
+      return NextResponse.json({ success: true, data, message: "Added to cart" });
     }
   } catch (error) {
     console.error("Server error:", error);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    return NextResponse.json({ success: false, error: "Internal server error" }, { status: 500 });
   }
 }
 
@@ -107,7 +146,7 @@ export async function PUT(request: NextRequest) {
 
     if (!cart_id || quantity === undefined) {
       return NextResponse.json(
-        { error: "cart_id and quantity are required" },
+        { success: false, error: "cart_id and quantity are required" },
         { status: 400 }
       );
     }
@@ -120,10 +159,10 @@ export async function PUT(request: NextRequest) {
         .eq("id", cart_id);
 
       if (error) {
-        return NextResponse.json({ error: error.message }, { status: 500 });
+        return NextResponse.json({ success: false, error: error.message }, { status: 500 });
       }
 
-      return NextResponse.json({ message: "Item removed from cart" });
+      return NextResponse.json({ success: true, message: "Item removed from cart" });
     }
 
     // Update quantity
@@ -131,17 +170,17 @@ export async function PUT(request: NextRequest) {
       .from("cart")
       .update({ quantity })
       .eq("id", cart_id)
-      .select()
+      .select(`*, products (*)`)
       .single();
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
+      return NextResponse.json({ success: false, error: error.message }, { status: 500 });
     }
 
-    return NextResponse.json({ data, message: "Quantity updated" });
+    return NextResponse.json({ success: true, data, message: "Quantity updated" });
   } catch (error) {
     console.error("Server error:", error);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    return NextResponse.json({ success: false, error: "Internal server error" }, { status: 500 });
   }
 }
 
@@ -154,7 +193,7 @@ export async function DELETE(request: NextRequest) {
     const cartId = searchParams.get("cart_id");
 
     if (!cartId) {
-      return NextResponse.json({ error: "cart_id is required" }, { status: 400 });
+      return NextResponse.json({ success: false, error: "cart_id is required" }, { status: 400 });
     }
 
     const { error } = await supabase
@@ -163,12 +202,12 @@ export async function DELETE(request: NextRequest) {
       .eq("id", parseInt(cartId));
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
+      return NextResponse.json({ success: false, error: error.message }, { status: 500 });
     }
 
-    return NextResponse.json({ message: "Item removed from cart" });
+    return NextResponse.json({ success: true, message: "Item removed from cart" });
   } catch (error) {
     console.error("Server error:", error);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    return NextResponse.json({ success: false, error: "Internal server error" }, { status: 500 });
   }
 }
