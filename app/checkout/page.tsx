@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation"; // Tambahkan useSearchParams
+import { useRouter, useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 
 /* =======================
@@ -39,11 +39,11 @@ const PAYMENT_METHODS = [
 ];
 
 /* =======================
-   PAGE
+   CHECKOUT CONTENT COMPONENT
 ======================= */
-export default function CheckoutPage() {
+function CheckoutContent() {
   const router = useRouter();
-  const searchParams = useSearchParams(); // Tambahkan ini
+  const searchParams = useSearchParams();
   const { data: session, status } = useSession();
   
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
@@ -55,15 +55,13 @@ export default function CheckoutPage() {
   const userId = session?.user?.id ? Number(session.user.id) : null;
 
   /* =======================
-     LOAD CART - UPDATED
+     LOAD CART
   ======================= */
   async function loadCart() {
     if (!userId) return;
     
-    // Ambil parameter items dari URL
     const selectedIds = searchParams.get('items');
     
-    // Jika tidak ada parameter items, redirect ke cart
     if (!selectedIds) {
       router.push('/cart');
       return;
@@ -74,15 +72,12 @@ export default function CheckoutPage() {
       const res = await fetch(`/api/cart?user_id=${userId}`);
       const data = await res.json();
       
-      // Convert selectedIds ke array of numbers
       const idsArray = selectedIds.split(',').map(id => parseInt(id.trim()));
       
-      // Filter hanya cart items yang dipilih
       const filteredItems = (data.data || []).filter((item: CartItem) => 
         idsArray.includes(item.id)
       );
       
-      // Jika tidak ada item yang cocok, redirect ke cart
       if (filteredItems.length === 0) {
         showToast("Item tidak ditemukan", "error");
         router.push('/cart');
@@ -106,7 +101,7 @@ export default function CheckoutPage() {
     if (status === "authenticated" && userId) {
       loadCart();
     }
-  }, [status, userId, searchParams]); // Tambahkan searchParams ke dependencies
+  }, [status, userId, searchParams]);
 
   /* =======================
      COMPUTED VALUES
@@ -139,10 +134,9 @@ export default function CheckoutPage() {
   }
 
   /* =======================
-     CLEAR CART AFTER ORDER - UPDATED
+     CLEAR CART AFTER ORDER
   ======================= */
   async function clearCart() {
-    // Hanya hapus item yang di-checkout (cartItems yang sudah difilter)
     for (const item of cartItems) {
       await fetch(`/api/cart?cart_id=${item.id}`, { method: "DELETE" });
     }
@@ -160,7 +154,6 @@ export default function CheckoutPage() {
     setSubmitting(true);
 
     try {
-      // Prepare items for order
       const items = cartItems.map(item => ({
         product_id: item.products.id,
         quantity: item.quantity,
@@ -168,7 +161,6 @@ export default function CheckoutPage() {
         name: item.products.name,
       }));
 
-      // Create order via API
       const res = await fetch("/api/orders", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -187,12 +179,10 @@ export default function CheckoutPage() {
         return;
       }
 
-      // Clear cart after successful order
       await clearCart();
 
       showToast("Pesanan berhasil dibuat! 🎉", "success");
       
-      // Redirect to orders page
       setTimeout(() => {
         router.push("/orders");
       }, 1500);
@@ -241,7 +231,6 @@ export default function CheckoutPage() {
   ======================= */
   return (
     <div className="checkout-page">
-      {/* Header */}
       <header className="checkout-header">
         <div className="checkout-header-content">
           <button onClick={() => router.back()} className="checkout-back-btn">
@@ -257,10 +246,7 @@ export default function CheckoutPage() {
         </div>
       </header>
 
-      {/* Main Content */}
       <main className="checkout-main">
-        
-        {/* Products Section */}
         <section className="checkout-card">
           <div className="checkout-card-header">
             <div className="checkout-card-icon">🛍️</div>
@@ -294,7 +280,6 @@ export default function CheckoutPage() {
           </div>
         </section>
 
-        {/* Payment Methods Section */}
         <section className="checkout-card">
           <div className="checkout-card-header">
             <div className="checkout-card-icon">💳</div>
@@ -328,7 +313,6 @@ export default function CheckoutPage() {
           </div>
         </section>
 
-        {/* Order Summary Section */}
         <section className="checkout-card">
           <div className="checkout-card-header">
             <div className="checkout-card-icon">📋</div>
@@ -359,7 +343,6 @@ export default function CheckoutPage() {
         </section>
       </main>
 
-      {/* Fixed Bottom CTA */}
       <div className="checkout-footer">
         <div className="checkout-footer-content">
           <div className="checkout-footer-total">
@@ -384,8 +367,25 @@ export default function CheckoutPage() {
         </div>
       </div>
 
-      {/* Toast */}
       {toast && <div className={`toast ${toast.type}`}>{toast.message}</div>}
     </div>
+  );
+}
+
+/* =======================
+   MAIN PAGE WITH SUSPENSE
+======================= */
+export default function CheckoutPage() {
+  return (
+    <Suspense fallback={
+      <div className="checkout-page">
+        <div className="checkout-loading">
+          <div className="checkout-spinner"></div>
+          <p>Memuat data...</p>
+        </div>
+      </div>
+    }>
+      <CheckoutContent />
+    </Suspense>
   );
 }
