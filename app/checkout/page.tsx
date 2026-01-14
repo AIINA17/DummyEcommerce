@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation"; // Tambahkan useSearchParams
 import { useSession } from "next-auth/react";
 
 /* =======================
@@ -43,6 +43,7 @@ const PAYMENT_METHODS = [
 ======================= */
 export default function CheckoutPage() {
   const router = useRouter();
+  const searchParams = useSearchParams(); // Tambahkan ini
   const { data: session, status } = useSession();
   
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
@@ -54,15 +55,41 @@ export default function CheckoutPage() {
   const userId = session?.user?.id ? Number(session.user.id) : null;
 
   /* =======================
-     LOAD CART
+     LOAD CART - UPDATED
   ======================= */
   async function loadCart() {
     if (!userId) return;
+    
+    // Ambil parameter items dari URL
+    const selectedIds = searchParams.get('items');
+    
+    // Jika tidak ada parameter items, redirect ke cart
+    if (!selectedIds) {
+      router.push('/cart');
+      return;
+    }
+    
     setLoading(true);
     try {
       const res = await fetch(`/api/cart?user_id=${userId}`);
       const data = await res.json();
-      setCartItems(data.data || []);
+      
+      // Convert selectedIds ke array of numbers
+      const idsArray = selectedIds.split(',').map(id => parseInt(id.trim()));
+      
+      // Filter hanya cart items yang dipilih
+      const filteredItems = (data.data || []).filter((item: CartItem) => 
+        idsArray.includes(item.id)
+      );
+      
+      // Jika tidak ada item yang cocok, redirect ke cart
+      if (filteredItems.length === 0) {
+        showToast("Item tidak ditemukan", "error");
+        router.push('/cart');
+        return;
+      }
+      
+      setCartItems(filteredItems);
     } catch (error) {
       console.error("Error loading cart:", error);
       showToast("Gagal memuat keranjang", "error");
@@ -79,7 +106,7 @@ export default function CheckoutPage() {
     if (status === "authenticated" && userId) {
       loadCart();
     }
-  }, [status, userId]);
+  }, [status, userId, searchParams]); // Tambahkan searchParams ke dependencies
 
   /* =======================
      COMPUTED VALUES
@@ -112,9 +139,10 @@ export default function CheckoutPage() {
   }
 
   /* =======================
-     CLEAR CART AFTER ORDER
+     CLEAR CART AFTER ORDER - UPDATED
   ======================= */
   async function clearCart() {
+    // Hanya hapus item yang di-checkout (cartItems yang sudah difilter)
     for (const item of cartItems) {
       await fetch(`/api/cart?cart_id=${item.id}`, { method: "DELETE" });
     }

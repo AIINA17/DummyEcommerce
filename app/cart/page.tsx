@@ -1,3 +1,4 @@
+// FILE: app/cart/page.tsx
 "use client";
 
 import { useEffect, useState } from "react";
@@ -126,8 +127,9 @@ export default function CartPage() {
       showToast("Pilih produk yang ingin di-checkout", "error");
       return;
     }
-    // Redirect to checkout page
-    window.location.href = "/checkout";
+
+    const selectedIds = selectedItems.map(item => item.id).join(',');
+    router.push(`/checkout?items=${selectedIds}`);
   }
 
   useEffect(() => {
