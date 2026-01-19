@@ -22,9 +22,10 @@ export async function GET(request: NextRequest) {
     // Mulai query ke Supabase
     let query = supabase.from("products").select("*");
 
-    // Filter by search query (nama produk)
+    // Filter by search query (nama produk DAN deskripsi)
+    // Pake OR filter untuk search di multiple columns
     if (q) {
-      query = query.ilike("name", `%${q}%`);
+      query = query.or(`name.ilike.%${q}%,description.ilike.%${q}%`);
     }
 
     // Filter by category
