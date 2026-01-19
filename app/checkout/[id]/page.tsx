@@ -149,7 +149,7 @@ export default function CheckoutProductPage() {
   if (loading) {
     return (
       <div className="checkout-page">
-        <div className="checkout-loading">
+        <div className="loading">
           <div className="checkout-spinner"></div>
           <p>Memuat produk...</p>
         </div>

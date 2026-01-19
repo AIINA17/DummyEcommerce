@@ -1,4 +1,4 @@
-// FILE: app/cart/page.tsx
+//app/cart/page.tsx
 "use client";
 
 import { useEffect, useState } from "react";
@@ -152,7 +152,9 @@ export default function CartPage() {
       </div>
 
       {loading ? (
-        <div className="loading"><div className="spinner"></div></div>
+        <div className="loading">
+          <div className="checkout-spinner"></div>Memuat keranjang...
+        </div>
       ) : cartItems.length === 0 ? (
         <div className="cart-items">
           <div className="cart-empty">

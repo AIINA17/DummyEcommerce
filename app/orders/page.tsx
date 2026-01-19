@@ -132,7 +132,7 @@ export default function OrdersPage() {
   if (loading) {
     return (
       <div className="checkout-page">
-        <div className="checkout-loading">
+        <div className="loading">
           <div className="checkout-spinner"></div>
           <p>Memuat daftar pesanan...</p>
         </div>

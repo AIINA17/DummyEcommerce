@@ -1,3 +1,4 @@
+//app/page.tsx
 "use client";
 
 import { useEffect, useState } from "react";
@@ -239,7 +240,7 @@ export default function Home() {
             {/* Products Grid */}
             {loading ? (
                 <div className="loading">
-                    <div className="spinner"></div>
+                    <div className="checkout-spinner"></div>Memuat produk...
                 </div>
             ) : products.length === 0 ? (
                 <div className="empty-state">
@@ -256,7 +257,11 @@ export default function Home() {
             ) : (
                 <div className="product-grid">
                     {products.map((product) => (
-                        <div key={product.id} className="product-card">
+                    <Link
+                    href={`/product/${product.id}`}
+                    key={product.id}
+                    className="product-card"
+                    >
                             {/* Product Image */}
                             <img
                                 src={
@@ -316,7 +321,7 @@ export default function Home() {
                                     + Keranjang
                                 </button>
                             </div>
-                        </div>
+                        </Link>
                     ))}
                 </div>
             )}

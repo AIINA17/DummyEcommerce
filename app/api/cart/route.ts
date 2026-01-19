@@ -1,6 +1,4 @@
-// FILE: app/api/cart/route.ts
-// Updated dengan JWT auth support (backward compatible)
-
+//app/api/cart/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { verifyToken } from "@/lib/jwt";

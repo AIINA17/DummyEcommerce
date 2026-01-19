@@ -128,7 +128,7 @@ export default function ProfilePage() {
         return (
             <main className="main-container">
                 <div className="loading">
-                    <div className="spinner"></div>
+                    <div className="checkout-spinner"></div>Memuat detail profile...
                 </div>
             </main>
         );
