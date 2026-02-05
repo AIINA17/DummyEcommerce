@@ -56,9 +56,9 @@ body {
         sans-serif;
     background: linear-gradient(
         180deg,
-        var(--primary) 0%,
-        var(--primary) 180px,
-        var(--gray-100) 180px
+        var(--primary) 10px,
+        var(--primary) 100px,
+        var(--gray-100) 400px
     );
     min-height: 100vh;
     color: var(--gray-800);
@@ -1789,4 +1789,53 @@ body {
         text-align: center;
         margin-top: 8px;
     }
+}
+
+/* =====================================================
+   DARK MODE
+   ===================================================== */
+.dark {
+    --primary: #ff6b4a;
+    --primary-dark: #ee4d2d;
+    --primary-light: #ff8a70;
+    --primary-50: #2a1f1d;
+    --primary-100: #3d2a26;
+
+    --white: #1a1a1a;
+    --gray-50: #242424;
+    --gray-100: #2d2d2d;
+    --gray-200: #3d3d3d;
+    --gray-300: #4d4d4d;
+    --gray-400: #6d6d6d;
+    --gray-500: #8d8d8d;
+    --gray-600: #adadad;
+    --gray-700: #cdcdcd;
+    --gray-800: #e0e0e0;
+    --gray-900: #f5f5f5;
+
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+    --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.4);
+    --shadow-lg: 0 10px 25px -3px rgba(0, 0, 0, 0.5);
+    --shadow-xl: 0 20px 40px -5px rgba(0, 0, 0, 0.6);
+}
+
+/* Dark Mode - Filter Section */
+.dark .filter-section {
+    background: #2d2d2d;
+    border: 1px solid #3d3d3d;
+}
+
+.dark .filter-input {
+    background: #1a1a1a;
+    border-color: #3d3d3d;
+    color: #ffffff;
+}
+
+.dark .filter-input::placeholder {
+    color: #8d8d8d;
+}
+
+.dark .filter-input:focus {
+    border-color: #ff6b4a;
+    box-shadow: 0 0 0 3px rgba(255, 107, 74, 0.2);
 }
