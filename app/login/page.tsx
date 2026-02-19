@@ -1,9 +1,11 @@
 "use client";
+// app/login/page.tsx
 
 import { signIn } from "next-auth/react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { ArrowLeft, Lock, AlertCircle } from "lucide-react";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -16,14 +18,12 @@ export default function LoginPage() {
     e.preventDefault();
     setLoading(true);
     setError("");
-
     try {
       const result = await signIn("credentials", {
         username,
         password,
         redirect: false,
       });
-
       if (result?.error) {
         setError("Username atau password salah. Silakan coba lagi.");
         setLoading(false);
@@ -31,248 +31,224 @@ export default function LoginPage() {
         router.push("/");
         router.refresh();
       }
-    } catch (err) {
+    } catch {
       setError("Terjadi masalah koneksi. Coba beberapa saat lagi.");
       setLoading(false);
     }
   };
 
   return (
-    <div className="checkout-page">
-      {/* Header - Identik dengan Order Detail */}
-      <header className="checkout-header">
-        <div className="checkout-header-content">
-          <button onClick={() => router.push("/")} className="checkout-back-btn">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M19 12H5M12 19l-7-7 7-7" />
-            </svg>
+    <div className="page-container">
+      {/* ── Header ── */}
+      <header className="page-header-bar">
+        <div className="page-header-bar-inner">
+          <button
+            onClick={() => router.push("/")}
+            className="back-btn"
+            aria-label="Kembali"
+          >
+            <ArrowLeft size={18} />
           </button>
-          <div className="checkout-header-text">
-            <h1>Masuk</h1>
-            <p>Silakan login untuk melanjutkan transaksi</p>
+          <div className="header-text">
+            <h1 className="header-title">Masuk</h1>
+            <p className="header-subtitle">
+              Silakan login untuk melanjutkan transaksi
+            </p>
           </div>
         </div>
       </header>
 
-      <main className="checkout-main">
-        <div style={{ maxWidth: "500px", margin: "0 auto" }}>
-          
-          {/* Error Alert Box */}
-          {error && (
-            <div className="checkout-error-alert mb-4">
-              <span>❌</span>
-              <p>{error}</p>
+      {/* ── Main ── */}
+      <main
+        className="page-main"
+        style={{ maxWidth: 520, justifyContent: "flex-start" }}
+      >
+        {/* Error Alert */}
+        {error && (
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+              background: "var(--primary-50)",
+              border: "1px solid var(--primary-100)",
+              borderLeft: "3px solid var(--primary)",
+              color: "var(--primary-dark)",
+              padding: "12px 16px",
+              borderRadius: "var(--radius-lg)",
+              fontSize: 13,
+              fontWeight: 500,
+            }}
+          >
+            <AlertCircle size={16} style={{ flexShrink: 0 }} />
+            <p>{error}</p>
+          </div>
+        )}
+
+        {/* Login Card */}
+        <div className="card">
+          {/* Card Header */}
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 12,
+              marginBottom: 20,
+              paddingBottom: 16,
+              borderBottom: "1px solid var(--gray-200)",
+            }}
+          >
+            <div
+              style={{
+                width: 42,
+                height: 42,
+                borderRadius: "var(--radius-lg)",
+                background: "var(--primary-50)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                color: "var(--primary)",
+              }}
+            >
+              <Lock size={20} />
             </div>
-          )}
-
-          {/* Login Card - Mengikuti struktur checkout-card */}
-          <section className="checkout-card">
-            <div className="checkout-card-header">
-              <div className="checkout-card-icon">🔒</div>
-              <div>
-                <h2>Akses Akun</h2>
-                <p>Gunakan username dan password Anda</p>
-              </div>
-            </div>
-
-            <form onSubmit={handleSubmit} className="mt-4">
-              <div className="form-group">
-                <label className="form-label">Username</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="Masukkan username"
-                  className="form-input"
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  disabled={loading}
-                />
-              </div>
-
-              <div className="form-group">
-                <div className="flex justify-between items-center mb-1">
-                  <label className="form-label">Password</label>
-                  <Link href="#" className="text-link-sm">Lupa Password?</Link>
-                </div>
-                <input
-                  type="password"
-                  required
-                  placeholder="Masukkan password"
-                  className="form-input"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  disabled={loading}
-                />
-              </div>
-
-              <button
-                type="submit"
-                disabled={loading}
-                className="btn btn-primary w-full mt-4"
-                style={{ padding: '14px' }}
+            <div>
+              <p
+                style={{
+                  fontWeight: 700,
+                  fontSize: 14,
+                  color: "var(--gray-900)",
+                }}
               >
-                {loading ? "Memproses..." : "Masuk Sekarang"}
-              </button>
-            </form>
-
-            <div className="register-footer">
-              <p>Belum punya akun?</p>
-              <Link href="/register" className="text-primary font-bold"> Daftar Sekarang</Link>
+                Akses Akun
+              </p>
+              <p
+                style={{ fontSize: 12, color: "var(--gray-500)", marginTop: 2 }}
+              >
+                Gunakan username dan password kamu
+              </p>
             </div>
-          </section>
+          </div>
 
-          {/* Support Links */}
-          <div className="support-links">
-            <Link href="#">Bantuan</Link>
-            <span>•</span>
-            <Link href="#">Kebijakan Privasi</Link>
+          {/* Form */}
+          <form
+            onSubmit={handleSubmit}
+            style={{ display: "flex", flexDirection: "column", gap: 16 }}
+          >
+            <div className="form-group">
+              <label className="form-label">Username</label>
+              <input
+                type="text"
+                required
+                placeholder="Masukkan username"
+                className="form-input"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                disabled={loading}
+              />
+            </div>
+
+            <div className="form-group">
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  marginBottom: 7,
+                }}
+              >
+                <label className="form-label" style={{ marginBottom: 0 }}>
+                  Password
+                </label>
+                <Link
+                  href="#"
+                  style={{
+                    fontSize: 12,
+                    color: "var(--info)",
+                    textDecoration: "none",
+                  }}
+                >
+                  Lupa Password?
+                </Link>
+              </div>
+              <input
+                type="password"
+                required
+                placeholder="Masukkan password"
+                className="form-input"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                disabled={loading}
+              />
+            </div>
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="btn btn-primary btn-full"
+              style={{ padding: "14px", marginTop: 4 }}
+            >
+              {loading ? (
+                <>
+                  <span className="spinner-sm" /> Memproses...
+                </>
+              ) : (
+                "Masuk Sekarang"
+              )}
+            </button>
+          </form>
+
+          {/* Register Footer */}
+          <div
+            style={{
+              textAlign: "center",
+              marginTop: 24,
+              paddingTop: 20,
+              borderTop: "1px dashed var(--gray-200)",
+              fontSize: 13,
+              color: "var(--gray-600)",
+            }}
+          >
+            Belum punya akun?{" "}
+            <Link
+              href="/register"
+              style={{
+                color: "var(--primary)",
+                fontWeight: 700,
+                textDecoration: "none",
+              }}
+            >
+              Daftar Sekarang
+            </Link>
           </div>
         </div>
+
+        {/* Support Links */}
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "center",
+            alignItems: "center",
+            gap: 12,
+            fontSize: 12,
+            color: "var(--gray-400)",
+          }}
+        >
+          <Link
+            href="#"
+            style={{ color: "var(--gray-400)", textDecoration: "none" }}
+          >
+            Bantuan
+          </Link>
+          <span>•</span>
+          <Link
+            href="#"
+            style={{ color: "var(--gray-400)", textDecoration: "none" }}
+          >
+            Kebijakan Privasi
+          </Link>
+        </div>
       </main>
-
-      <style jsx>{`
-        /* Sync dengan style OrderDetail */
-        .checkout-page {
-          min-height: 100vh;
-          background: #f8f9fa;
-        }
-        .checkout-header {
-          background: white;
-          border-bottom: 1px solid #eee;
-        }
-        .checkout-header-content {
-          max-width: 1200px;
-          margin: 0 auto;
-          padding: 15px 20px;
-          display: flex;
-          align-items: center;
-          gap: 15px;
-        }
-        .checkout-header-text h1 {
-          font-size: 1.25rem;
-          font-weight: 700;
-          color: #333;
-          margin: 0;
-        }
-        .checkout-header-text p {
-          font-size: 0.85rem;
-          color: #666;
-          margin: 0;
-        }
-        .checkout-back-btn {
-          background: none;
-          border: none;
-          padding: 5px;
-          cursor: pointer;
-          color: #333;
-        }
-        .checkout-back-btn svg { width: 24px; height: 24px; }
-
-        .checkout-main {
-          max-width: 1200px;
-          margin: 0 auto;
-          padding: 20px;
-        }
-
-        .checkout-card {
-          background: white;
-          border-radius: 12px;
-          padding: 20px;
-          margin-bottom: 20px;
-          box-shadow: 0 2px 10px rgba(0,0,0,0.05);
-          border: 1px solid #f0f0f0;
-        }
-        .checkout-card-header {
-          display: flex;
-          gap: 15px;
-          align-items: center;
-          padding-bottom: 15px;
-          border-bottom: 1px solid #f8f9fa;
-          margin-bottom: 15px;
-        }
-        .checkout-card-icon {
-          width: 45px;
-          height: 45px;
-          background: #fff5f2;
-          border-radius: 12px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          font-size: 1.2rem;
-        }
-        .checkout-card-header h2 {
-          font-size: 1.05rem;
-          font-weight: 700;
-          margin: 0;
-        }
-        .checkout-card-header p {
-          font-size: 0.85rem;
-          color: #777;
-          margin: 0;
-        }
-
-        .form-group { margin-bottom: 15px; }
-        .form-label { display: block; font-size: 0.9rem; font-weight: 600; color: #444; margin-bottom: 8px; }
-        .form-input {
-          width: 100%;
-          padding: 12px;
-          border: 1px solid #ddd;
-          border-radius: 8px;
-          font-size: 1rem;
-          outline: none;
-          transition: border-color 0.2s;
-        }
-        .form-input:focus { border-color: #EE4D2D; }
-        
-        .btn-primary {
-          background: #EE4D2D;
-          color: white;
-          border: none;
-          border-radius: 8px;
-          font-weight: 700;
-          cursor: pointer;
-          transition: opacity 0.2s;
-        }
-        .btn-primary:hover { opacity: 0.9; }
-        .btn-primary:disabled { background: #ccc; }
-
-        .checkout-error-alert {
-          background: #fff1f0;
-          border: 1px solid #ffccc7;
-          padding: 12px;
-          border-radius: 8px;
-          display: flex;
-          gap: 10px;
-          color: #ff4d4f;
-          font-size: 0.9rem;
-          align-items: center;
-        }
-
-        .text-primary { color: #EE4D2D; }
-        .font-bold { font-weight: 700; }
-        .text-link-sm { font-size: 0.8rem; color: #3498db; text-decoration: none; }
-        
-        .register-footer {
-          text-align: center;
-          margin-top: 25px;
-          padding-top: 20px;
-          border-top: 1px dashed #eee;
-          font-size: 0.9rem;
-        }
-        
-        .support-links {
-          display: flex;
-          justify-content: center;
-          gap: 15px;
-          margin-top: 20px;
-          font-size: 0.8rem;
-          color: #999;
-        }
-        .support-links a { color: #999; text-decoration: none; }
-        .w-full { width: 100%; }
-        .mt-4 { margin-top: 1rem; }
-        .mb-4 { margin-bottom: 1rem; }
-      `}</style>
     </div>
   );
 }

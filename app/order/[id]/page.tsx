@@ -1,12 +1,23 @@
 "use client";
+// app/order/[id]/page.tsx
 
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import {
+  ArrowLeft,
+  RefreshCw,
+  FileText,
+  ShoppingBag,
+  CreditCard,
+  CheckCircle2,
+  Truck,
+  PartyPopper,
+  XCircle,
+  Clock,
+} from "lucide-react";
 
-/* =======================
-    TYPES
-======================= */
+/* =======================  TYPES  ======================= */
 interface OrderItem {
   id: number;
   product_id: number;
@@ -14,7 +25,6 @@ interface OrderItem {
   price_at_purchase: number;
   name_snapshot: string;
 }
-
 interface Order {
   id: number;
   user_id: number;
@@ -26,6 +36,56 @@ interface Order {
   order_items: OrderItem[];
 }
 
+/* =======================  CONSTANTS  ======================= */
+type StatusInfo = { label: string; icon: React.ReactNode; cls: string };
+
+const STATUS_CONFIG: Record<string, StatusInfo> = {
+  paid: {
+    label: "Dibayar",
+    icon: <CheckCircle2 size={12} />,
+    cls: "status-badge--success",
+  },
+  shipped: {
+    label: "Dikirim",
+    icon: <Truck size={12} />,
+    cls: "status-badge--info",
+  },
+  completed: {
+    label: "Selesai",
+    icon: <PartyPopper size={12} />,
+    cls: "status-badge--success",
+  },
+  cancelled: {
+    label: "Dibatalkan",
+    icon: <XCircle size={12} />,
+    cls: "status-badge--error",
+  },
+  default: {
+    label: "Menunggu Pembayaran",
+    icon: <Clock size={12} />,
+    cls: "status-badge--warning",
+  },
+};
+
+const PAYMENT_LABELS: Record<string, string> = {
+  gopay: "GoPay",
+  ovo: "OVO",
+  shopee: "ShopeePay",
+  dana: "DANA",
+  va: "Virtual Account",
+};
+
+/* =======================  HELPERS  ======================= */
+const formatPrice = (p: number) => new Intl.NumberFormat("id-ID").format(p);
+const getStatusInfo = (s: string): StatusInfo =>
+  STATUS_CONFIG[s] ?? STATUS_CONFIG.default;
+const getPaymentLabel = (method: string): string => {
+  const lower = method?.toLowerCase() ?? "";
+  const key = Object.keys(PAYMENT_LABELS).find((k) => lower.includes(k));
+  return PAYMENT_LABELS[key ?? ""] ?? method;
+};
+
+/* =======================  MAIN PAGE  ======================= */
 export default function OrderDetail() {
   const { id } = useParams();
   const router = useRouter();
@@ -38,207 +98,311 @@ export default function OrderDetail() {
       const res = await fetch(`/api/orders/${id}`);
       const data = await res.json();
       setOrder(data.data);
-    } catch (error) {
-      console.error("Error loading order:", error);
+    } catch (err) {
+      console.error("Error loading order:", err);
     } finally {
       setLoading(false);
     }
   };
-
-  useEffect(() => {
-    loadOrder();
-    const interval = setInterval(loadOrder, 10000);
-    return () => clearInterval(interval);
-  }, [id]);
 
   const handlePay = async () => {
     setPaying(true);
     try {
       await fetch(`/api/orders/${id}/pay`, { method: "POST" });
       loadOrder();
-    } catch (error) {
-      console.error("Error paying:", error);
+    } catch (err) {
+      console.error("Error paying:", err);
     } finally {
       setPaying(false);
     }
   };
 
-  /* =======================
-      HELPERS
-  ======================= */
-  const formatPrice = (p: number) => new Intl.NumberFormat("id-ID").format(p);
+  useEffect(() => {
+    loadOrder();
+    const iv = setInterval(loadOrder, 10_000);
+    return () => clearInterval(iv);
+  }, [id]);
 
-  const getStatusConfig = (status: string) => {
-    switch (status) {
-      case "paid": return { label: "Dibayar", color: "text-success", icon: "✅" };
-      case "shipped": return { label: "Dikirim", color: "text-info", icon: "🚚" };
-      case "completed": return { label: "Selesai", color: "text-success", icon: "🎉" };
-      case "cancelled": return { label: "Dibatalkan", color: "text-error", icon: "❌" };
-      default: return { label: "Menunggu Pembayaran", color: "text-warning", icon: "⏳" };
-    }
-  };
-
+  /* ── States ── */
   if (loading) {
     return (
-      <div className="checkout-page">
-        <div className="loading">
-          <div className="checkout-spinner"></div>
-          <p>Memuat rincian pesanan...</p>
-        </div>
+      <div className="page-container state-screen">
+        <div className="spinner" />
+        <p className="state-text">Memuat rincian pesanan...</p>
       </div>
     );
   }
 
   if (!order) {
     return (
-      <div className="checkout-page">
-        <div className="checkout-empty">
-          <div className="checkout-empty-icon">❌</div>
-          <h2>Pesanan Tidak Ada</h2>
-          <Link href="/orders"><button className="btn btn-primary mt-4">Kembali</button></Link>
+      <div className="page-container state-screen">
+        <div className="state-icon">
+          <XCircle size={34} />
         </div>
+        <h2 className="state-title">Pesanan Tidak Ditemukan</h2>
+        <p className="state-text">
+          Pesanan ini tidak tersedia atau sudah dihapus.
+        </p>
+        <Link href="/orders">
+          <button className="btn btn-primary">Kembali ke Pesanan</button>
+        </Link>
       </div>
     );
   }
 
-  const statusInfo = getStatusConfig(order.status);
+  const statusInfo = getStatusInfo(order.status);
 
   return (
-    <div className="checkout-page">
-      {/* Header */}
-      <header className="checkout-header">
-        <div className="checkout-header-content">
-          <button onClick={() => router.push("/orders")} className="checkout-back-btn">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M19 12H5M12 19l-7-7 7-7"/>
-            </svg>
+    <div className="page-container">
+      {/* ── Header ── */}
+      <header className="page-header-bar">
+        <div className="page-header-bar-inner">
+          <button
+            onClick={() => router.push("/orders")}
+            className="back-btn"
+            aria-label="Kembali"
+          >
+            <ArrowLeft size={18} />
           </button>
-          <div className="checkout-header-text">
-            <h1>Rincian Pesanan</h1>
-            <p>ID Transaksi: ORD-{order.id}</p>
+          <div className="header-text">
+            <h1 className="header-title">Rincian Pesanan</h1>
+            <p className="header-subtitle">ORD-{order.id}</p>
           </div>
-          <div className={`status-badge-detail ${statusInfo.color}`}>
-            {statusInfo.icon} {statusInfo.label}
+          <div className="header-badge">
+            <RefreshCw size={11} /> Live
           </div>
         </div>
       </header>
 
-      <main className="checkout-main">
-        {/* Order Status Section */}
-        <section className="checkout-card">
-          <div className="checkout-card-header">
-            <div className="checkout-card-icon">📄</div>
+      {/* ── Main ── */}
+      <main
+        className="page-main"
+        style={{ paddingBottom: order.status === "pending" ? 100 : 24 }}
+      >
+        {/* Status Card */}
+        <div
+          className="card"
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 16,
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <div
+              style={{
+                width: 42,
+                height: 42,
+                borderRadius: "var(--radius-lg)",
+                background: "var(--primary-50)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                color: "var(--primary)",
+              }}
+            >
+              <FileText size={20} />
+            </div>
             <div>
-              <h2>Informasi Pesanan</h2>
-              <p>Waktu Pemesanan: {new Date(order.created_at).toLocaleString("id-ID")}</p>
+              <p
+                style={{
+                  fontWeight: 700,
+                  fontSize: 14,
+                  color: "var(--gray-900)",
+                }}
+              >
+                Informasi Pesanan
+              </p>
+              <p
+                style={{ fontSize: 12, color: "var(--gray-500)", marginTop: 2 }}
+              >
+                {new Date(order.created_at).toLocaleString("id-ID", {
+                  day: "numeric",
+                  month: "long",
+                  year: "numeric",
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })}
+              </p>
             </div>
           </div>
-        </section>
+          <span className={`status-badge ${statusInfo.cls}`}>
+            {statusInfo.icon} {statusInfo.label}
+          </span>
+        </div>
 
-        {/* Items Section */}
-        <section className="checkout-card">
-          <div className="checkout-card-header">
-            <div className="checkout-card-icon">🛍️</div>
+        {/* Items Card */}
+        <div className="card">
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 12,
+              marginBottom: 16,
+              paddingBottom: 14,
+              borderBottom: "1px solid var(--gray-200)",
+            }}
+          >
+            <div
+              style={{
+                width: 42,
+                height: 42,
+                borderRadius: "var(--radius-lg)",
+                background: "var(--primary-50)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                color: "var(--primary)",
+              }}
+            >
+              <ShoppingBag size={20} />
+            </div>
             <div>
-              <h2>Produk Dipesan</h2>
-              <p>{order.order_items.length} item dalam pesanan ini</p>
+              <p
+                style={{
+                  fontWeight: 700,
+                  fontSize: 14,
+                  color: "var(--gray-900)",
+                }}
+              >
+                Produk Dipesan
+              </p>
+              <p
+                style={{ fontSize: 12, color: "var(--gray-500)", marginTop: 2 }}
+              >
+                {order.order_items.length} item dalam pesanan ini
+              </p>
             </div>
           </div>
-          <div className="checkout-items">
+
+          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
             {order.order_items.map((item) => (
-              <div key={item.id} className="checkout-item">
-                <img 
-                   src={`https://picsum.photos/seed/${item.product_id}/80/80`} 
-                   alt={item.name_snapshot} 
-                   className="checkout-item-image" 
+              <div
+                key={item.id}
+                style={{ display: "flex", gap: 12, alignItems: "center" }}
+              >
+                <img
+                  src={`https://picsum.photos/seed/${item.product_id}/80/80`}
+                  alt={item.name_snapshot}
+                  className="item-row-img"
                 />
-                <div className="checkout-item-details">
-                  <h3>{item.name_snapshot}</h3>
-                  <div className="checkout-item-bottom">
-                    <span className="checkout-item-price">Rp {formatPrice(item.price_at_purchase)}</span>
-                    <span className="checkout-item-qty">x{item.quantity}</span>
+                <div className="item-row-body">
+                  <p className="item-row-name">{item.name_snapshot}</p>
+                  <div className="item-row-bottom">
+                    <span className="item-row-price">
+                      Rp {formatPrice(item.price_at_purchase)}
+                    </span>
+                    <span className="item-row-qty">x{item.quantity}</span>
                   </div>
                 </div>
-                <div className="item-total-price">
-                   Rp {formatPrice(item.price_at_purchase * item.quantity)}
-                </div>
+                <p
+                  style={{
+                    fontSize: 14,
+                    fontWeight: 700,
+                    color: "var(--gray-800)",
+                    minWidth: 90,
+                    textAlign: "right",
+                    flexShrink: 0,
+                  }}
+                >
+                  Rp {formatPrice(item.price_at_purchase * item.quantity)}
+                </p>
               </div>
             ))}
           </div>
-        </section>
+        </div>
 
-        {/* Payment Detail Section */}
-        <section className="checkout-card">
-          <div className="checkout-card-header">
-            <div className="checkout-card-icon">💳</div>
+        {/* Payment Card */}
+        <div className="card">
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 12,
+              marginBottom: 16,
+              paddingBottom: 14,
+              borderBottom: "1px solid var(--gray-200)",
+            }}
+          >
+            <div
+              style={{
+                width: 42,
+                height: 42,
+                borderRadius: "var(--radius-lg)",
+                background: "var(--primary-50)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                color: "var(--primary)",
+              }}
+            >
+              <CreditCard size={20} />
+            </div>
             <div>
-              <h2>Metode Pembayaran</h2>
-              <p>{order.payment_method}</p>
+              <p
+                style={{
+                  fontWeight: 700,
+                  fontSize: 14,
+                  color: "var(--gray-900)",
+                }}
+              >
+                Metode Pembayaran
+              </p>
+              <p
+                style={{ fontSize: 12, color: "var(--gray-500)", marginTop: 2 }}
+              >
+                {getPaymentLabel(order.payment_method)}
+              </p>
             </div>
           </div>
-          <div className="order-summary mt-2">
+
+          <div className="order-summary">
             <div className="order-summary-row">
               <span>Total Harga Produk</span>
               <span>Rp {formatPrice(order.total)}</span>
             </div>
             <div className="order-summary-row">
               <span>Ongkos Kirim</span>
-              <span className="text-success">Gratis</span>
+              <span style={{ color: "var(--success)", fontWeight: 600 }}>
+                Gratis
+              </span>
             </div>
-            <div className="order-summary-row total">
+            <div className="order-summary-row order-summary-row--total">
               <span>Total Pembayaran</span>
-              <span className="text-primary font-bold">Rp {formatPrice(order.total)}</span>
+              <span>Rp {formatPrice(order.total)}</span>
             </div>
           </div>
-        </section>
+        </div>
       </main>
 
-      {/* Floating Bottom Action (Only for Pending) */}
+      {/* ── Sticky Footer (pending only) ── */}
       {order.status === "pending" && (
         <div className="checkout-footer">
-          <div className="checkout-footer-content">
+          <div className="checkout-footer-inner">
             <div className="checkout-footer-total">
-              <p>Total yang harus dibayar</p>
-              <p className="checkout-footer-price">Rp {formatPrice(order.total)}</p>
+              <p className="checkout-footer-label">Total yang harus dibayar</p>
+              <p className="checkout-footer-price">
+                Rp {formatPrice(order.total)}
+              </p>
             </div>
-            <button 
-              onClick={handlePay} 
-              disabled={paying} 
-              className="btn btn-primary checkout-pay-btn"
+            <button
+              onClick={handlePay}
+              disabled={paying}
+              className="btn btn-primary"
+              style={{ padding: "14px 32px", flexShrink: 0 }}
             >
-              {paying ? "Memproses..." : "Bayar Sekarang"}
+              {paying ? (
+                <>
+                  <span className="spinner-sm" /> Memproses...
+                </>
+              ) : (
+                "Bayar Sekarang"
+              )}
             </button>
           </div>
         </div>
       )}
-
-      <style jsx>{`
-        .status-badge-detail {
-          background: #f8f9fa;
-          padding: 6px 14px;
-          border-radius: 50px;
-          font-weight: 700;
-          font-size: 0.85rem;
-          border: 1px solid #eee;
-        }
-        .item-total-price {
-          font-weight: 700;
-          color: #333;
-          font-size: 0.95rem;
-          min-width: 100px;
-          text-align: right;
-        }
-        .text-primary { color: #EE4D2D; }
-        .text-success { color: #2ecc71; }
-        .text-info { color: #3498db; }
-        .text-warning { color: #f1c40f; }
-        .text-error { color: #e74c3c; }
-        .font-bold { font-weight: 800; }
-        .mt-2 { margin-top: 10px; }
-        @media (max-width: 640px) {
-          .item-total-price { display: none; }
-        }
-      `}</style>
     </div>
   );
 }

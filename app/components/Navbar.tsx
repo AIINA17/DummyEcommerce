@@ -1,8 +1,22 @@
 "use client";
+// components/Navbar.tsx
 
 import Link from "next/link";
 import { useState, useEffect } from "react";
 import { signOut, useSession } from "next-auth/react";
+import {
+  ShoppingBag,
+  Search,
+  Home,
+  ShoppingCart,
+  ClipboardList,
+  Sun,
+  Moon,
+  ChevronDown,
+  User,
+  LogOut,
+  CreditCard,
+} from "lucide-react";
 
 export default function Navbar() {
   const { data: session } = useSession();
@@ -10,136 +24,93 @@ export default function Navbar() {
   const [balance, setBalance] = useState<number | null>(null);
   const [darkMode, setDarkMode] = useState(false);
 
-  // Fetch balance
   useEffect(() => {
     if (!session) return;
-
     fetch("/api/me")
-      .then(res => res.json())
-      .then(res => {
-        if (res.success) {
-          setBalance(res.data.balance);
-        }
+      .then((r) => r.json())
+      .then((r) => {
+        if (r.success) setBalance(r.data.balance);
       });
   }, [session]);
 
-  // Dark mode - load dari localStorage waktu pertama kali
   useEffect(() => {
-    const savedTheme = localStorage.getItem("theme");
-    const isDark = savedTheme === "dark";
+    const isDark = localStorage.getItem("theme") === "dark";
     setDarkMode(isDark);
-
-    if (isDark) {
-      document.documentElement.classList.add("dark");
-    }
+    if (isDark) document.documentElement.classList.add("dark");
   }, []);
 
-  // Function untuk toggle dark mode
   function toggleDarkMode() {
-    const newMode = !darkMode;
-    setDarkMode(newMode);
-
-    if (newMode) {
-      document.documentElement.classList.add("dark");
-      localStorage.setItem("theme", "dark");
-    } else {
-      document.documentElement.classList.remove("dark");
-      localStorage.setItem("theme", "light");
-    }
+    const next = !darkMode;
+    setDarkMode(next);
+    document.documentElement.classList.toggle("dark", next);
+    localStorage.setItem("theme", next ? "dark" : "light");
   }
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest(".navbar-account")) setOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
 
   return (
     <nav className="navbar">
-      {/* Logo & Brand */}
+      {/* ── Logo ── */}
       <Link href="/" className="navbar-logo">
-        <svg
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2">
-          <path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z" />
-          <line x1="3" y1="6" x2="21" y2="6" />
-          <path d="M16 10a4 4 0 01-8 0" />
-        </svg>
+        <ShoppingBag size={22} />
         ShopKu
       </Link>
 
-      {/* Search Bar */}
+      {/* ── Search ── */}
       <div className="search-container">
         <form className="search-bar" action="/" method="GET">
-          <input
-            type="text"
-            name="q"
-            placeholder="Cari produk di ShopKu..."
-          />
-          <button type="submit">
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2">
-              <circle cx="11" cy="11" r="8" />
-              <path d="M21 21l-4.35-4.35" />
-            </svg>
+          <input type="text" name="q" placeholder="Cari produk di ShopKu..." />
+          <button type="submit" aria-label="Cari">
+            <Search size={17} color="white" />
           </button>
         </form>
       </div>
 
-      {/* Navigation Links */}
+      {/* ── Links ── */}
       <div className="navbar-links">
         <Link href="/" className="navbar-link">
-          <span>Home</span>
+          <Home size={16} /> <span>Home</span>
         </Link>
-
         <Link href="/cart" className="navbar-link">
-          <span>Keranjang</span>
+          <ShoppingCart size={16} /> <span>Keranjang</span>
         </Link>
-
         <Link href="/orders" className="navbar-link">
-          <span>Pesanan</span>
+          <ClipboardList size={16} /> <span>Pesanan</span>
         </Link>
 
-        {/* Dark Mode Toggle Button */}
+        {/* Dark Mode */}
         <button
           onClick={toggleDarkMode}
           className="navbar-link"
           style={{ cursor: "pointer", background: "none", border: "none" }}
-          title={darkMode ? "Light Mode" : "Dark Mode"}
+          aria-label={darkMode ? "Light mode" : "Dark mode"}
         >
-          {darkMode ? (
-            // Icon Matahari (untuk switch ke light)
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <circle cx="12" cy="12" r="5"/>
-              <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
-            </svg>
-          ) : (
-            // Icon Bulan (untuk switch ke dark)
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/>
-            </svg>
-          )}
+          {darkMode ? <Sun size={18} /> : <Moon size={18} />}
         </button>
 
-        {session && (
+        {/* Account Dropdown */}
+        {session ? (
           <div className="navbar-account">
-            <button
-              className="account-trigger"
-              onClick={() => setOpen(!open)}>
+            <button className="account-trigger" onClick={() => setOpen(!open)}>
               <span>Akun</span>
-              <svg
-                className={`chevron ${open ? "open" : ""}`}
-                width="16"
-                height="16"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2">
-                <polyline points="6 9 12 15 18 9" />
-              </svg>
+              <ChevronDown
+                size={15}
+                className={`chevron${open ? " open" : ""}`}
+              />
             </button>
 
             {open && (
               <div className="account-dropdown">
+                {/* Header */}
                 <div className="dropdown-header">
                   <div className="user-avatar">
                     {session.user?.name?.charAt(0).toUpperCase() || "U"}
@@ -148,61 +119,47 @@ export default function Navbar() {
                     <div className="user-name">
                       {session.user?.name || "User"}
                     </div>
-                    <div className="user-email">
-                      {session.user?.email}
-                    </div>
-                    <div className="user-balance">
-                      💳 ShopKu Pay:{" "}
+                    <div className="user-email">{session.user?.email}</div>
+                    <div
+                      style={{
+                        fontSize: 16,
+                        opacity: 0.85,
+                        marginTop: 4,
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 5,
+                      }}
+                    >
+                      ShopKu Pay:{" "}
                       {balance !== null
-                        ? `Rp ${balance.toLocaleString()}`
-                        : "Loading..."}
+                        ? `Rp${balance.toLocaleString("id-ID")}`
+                        : "—"}
                     </div>
                   </div>
                 </div>
 
-                <div className="dropdown-divider"></div>
+                <div className="dropdown-divider" />
 
                 <Link
                   href="/profile"
                   className="dropdown-item"
-                  onClick={() => setOpen(false)}>
-                  <svg
-                    width="18"
-                    height="18"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2">
-                    <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2" />
-                    <circle cx="12" cy="7" r="4" />
-                  </svg>
-                  <span>Pengaturan Profil</span>
+                  onClick={() => setOpen(false)}
+                >
+                  <User size={16} /> <span>Pengaturan Profil</span>
                 </Link>
 
-                <div className="dropdown-divider"></div>
+                <div className="dropdown-divider" />
 
                 <button
                   className="dropdown-item logout"
-                  onClick={() => signOut()}>
-                  <svg
-                    width="18"
-                    height="18"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2">
-                    <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4" />
-                    <polyline points="16 17 21 12 16 7" />
-                    <line x1="21" y1="12" x2="9" y2="12" />
-                  </svg>
-                  <span>Logout</span>
+                  onClick={() => signOut()}
+                >
+                  <LogOut size={16} /> <span>Logout</span>
                 </button>
               </div>
             )}
           </div>
-        )}
-
-        {!session && (
+        ) : (
           <Link href="/login" className="navbar-link">
             <span>Login</span>
           </Link>

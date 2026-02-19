@@ -1,8 +1,8 @@
-"use client"
+"use client";
 
-import { SessionProvider } from "next-auth/react"
-import { ReactNode } from "react"
-import Navbar from "./components/Navbar"
+import { SessionProvider } from "next-auth/react";
+import { ReactNode } from "react";
+import Navbar from "./components/Navbar";
 
 export default function Providers({ children }: { children: ReactNode }) {
   return (
@@ -10,5 +10,5 @@ export default function Providers({ children }: { children: ReactNode }) {
       <Navbar />
       {children}
     </SessionProvider>
-  )
+  );
 }
