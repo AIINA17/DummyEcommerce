@@ -6,6 +6,7 @@ import { signIn } from "next-auth/react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, UserPlus, AlertCircle } from "lucide-react";
+import Aurora from "@/app/components/reactbits/Aurora/Aurora";
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -61,11 +62,24 @@ export default function RegisterPage() {
         </div>
       </header>
 
-      {/* ── Main ── */}
-      <main
-        className="page-main"
-        style={{ maxWidth: 520, justifyContent: "flex-start" }}
+      {/* ── Main (dark backdrop so the orange Aurora glow has contrast) ── */}
+      <div
+        style={{
+          position: "relative",
+          flex: 1,
+          display: "flex",
+          flexDirection: "column",
+          overflow: "hidden",
+          background: "#1c1210",
+        }}
       >
+        <div style={{ position: "absolute", inset: 0 }}>
+          <Aurora colorStops={["#ff6742", "#ee4d2d", "#d73211"]} amplitude={1.2} blend={0.6} />
+        </div>
+        <main
+          className="page-main"
+          style={{ position: "relative", zIndex: 1, maxWidth: 520, justifyContent: "flex-start" }}
+        >
         {/* Error Alert */}
         {error && (
           <div
@@ -231,7 +245,8 @@ export default function RegisterPage() {
             Kebijakan Privasi
           </Link>
         </div>
-      </main>
+        </main>
+      </div>
     </div>
   );
 }

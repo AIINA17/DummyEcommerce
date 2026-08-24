@@ -14,6 +14,7 @@ import {
   Plus,
   CheckCheck,
 } from "lucide-react";
+import StarBorder from "@/app/components/reactbits/StarBorder/StarBorder";
 
 /* =======================  TYPES  ======================= */
 interface Product {
@@ -308,14 +309,20 @@ export default function CartPage() {
             <span className="cart-summary-label">Total Harga</span>
             <span className="cart-summary-value">{formatPrice(subtotal)}</span>
           </div>
-          <button
-            className="btn btn-primary btn-full"
-            style={{ marginTop: 18, padding: "13px" }}
+          <StarBorder
+            as="button"
+            className="btn-full"
+            style={{ marginTop: 18, width: "100%" }}
+            innerClassName="btn btn-primary"
+            color="#ffd280"
+            thickness={2}
             onClick={handleCheckout}
             disabled={selectedItems.length === 0}
           >
-            <CheckCheck size={15} /> Checkout ({selectedItems.length})
-          </button>
+            <span style={{ padding: "5px 0", display: "inline-flex", alignItems: "center", gap: 7 }}>
+              <CheckCheck size={15} /> Checkout ({selectedItems.length})
+            </span>
+          </StarBorder>
           <Link href="/" style={{ display: "block", marginTop: 8 }}>
             <button className="btn btn-secondary btn-full">
               Lanjut Belanja

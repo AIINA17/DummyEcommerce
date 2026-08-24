@@ -14,6 +14,7 @@ import {
   XCircle,
   Clock,
 } from "lucide-react";
+import StarBorder from "@/app/components/reactbits/StarBorder/StarBorder";
 
 /* =======================  TYPES  ======================= */
 interface OrderItem {
@@ -336,20 +337,25 @@ export default function OrderDetail() {
                 Rp {formatPrice(order.total)}
               </p>
             </div>
-            <button
+            <StarBorder
+              as="button"
+              style={{ flexShrink: 0 }}
+              innerClassName="btn btn-primary"
+              color="#ffd280"
+              thickness={2}
               onClick={handlePay}
               disabled={paying}
-              className="btn btn-primary"
-              style={{ padding: "14px 32px", flexShrink: 0 }}
             >
-              {paying ? (
-                <>
-                  <span className="spinner-sm" /> Memproses...
-                </>
-              ) : (
-                "Bayar Sekarang"
-              )}
-            </button>
+              <span style={{ padding: "8px 24px", display: "inline-flex", alignItems: "center", gap: 7 }}>
+                {paying ? (
+                  <>
+                    <span className="spinner-sm" /> Memproses...
+                  </>
+                ) : (
+                  "Bayar Sekarang"
+                )}
+              </span>
+            </StarBorder>
           </div>
         </div>
       )}

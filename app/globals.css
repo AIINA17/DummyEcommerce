@@ -898,9 +898,9 @@ body {
   box-shadow: var(--shadow-lg);
 }
 .product-image {
+  position: relative;
   width: 100%;
   aspect-ratio: 1;
-  object-fit: cover;
   background: var(--gray-100);
   display: block;
 }

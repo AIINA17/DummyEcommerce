@@ -1,3 +1,4 @@
+"use client";
 // app/components/OrderSummaryCard.tsx
 // Rincian biaya di halaman checkout. serviceFee sama persis dengan nilai
 // yang dipakai server (lib/constants.ts) untuk menghitung total pesanan,

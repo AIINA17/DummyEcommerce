@@ -5,6 +5,9 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
 import { Search, RotateCcw, ShoppingCart, Star } from "lucide-react";
+import ShinyText from "@/app/components/reactbits/ShinyText/ShinyText";
+import TiltedCard from "@/app/components/reactbits/TiltedCard/TiltedCard";
+import ClickSpark from "@/app/components/reactbits/ClickSpark/ClickSpark";
 
 /* =======================  TYPES  ======================= */
 interface Product {
@@ -118,7 +121,14 @@ export default function Home() {
     <div className="main-container">
       {/* ── Red Hero Band ── */}
       <div className="page-hero">
-        <h1 className="page-title">Semua Produk</h1>
+        <h1 className="page-title">
+          <ShinyText
+            text="Semua Produk"
+            speed={3}
+            color="rgba(255, 255, 255, 0.85)"
+            shineColor="#ffffff"
+          />
+        </h1>
         <p className="page-subtitle">
           Temukan produk terbaik untuk kebutuhanmu
         </p>
@@ -215,18 +225,27 @@ export default function Home() {
               className="product-card"
               style={{ animationDelay: `${Math.min(i, 10) * 0.04}s` }}
             >
-              <img
-                src={
-                  product.image_url ||
-                  `https://picsum.photos/seed/${product.id}/300/300`
-                }
-                alt={product.name}
-                className="product-image"
-                onError={(e) => {
-                  (e.target as HTMLImageElement).src =
-                    `https://picsum.photos/seed/${product.id}/300/300`;
-                }}
-              />
+              <div className="product-image">
+                <TiltedCard
+                  imageSrc={
+                    product.image_url ||
+                    `https://picsum.photos/seed/${product.id}/300/300`
+                  }
+                  altText={product.name}
+                  containerHeight="100%"
+                  containerWidth="100%"
+                  imageHeight="100%"
+                  imageWidth="100%"
+                  scaleOnHover={1.06}
+                  rotateAmplitude={10}
+                  showMobileWarning={false}
+                  showTooltip={false}
+                  onImageError={(e) => {
+                    (e.target as HTMLImageElement).src =
+                      `https://picsum.photos/seed/${product.id}/300/300`;
+                  }}
+                />
+              </div>
               <div className="product-info">
                 <h3 className="product-name">{product.name}</h3>
                 <p className="product-price">{formatPrice(product.price)}</p>
@@ -241,15 +260,17 @@ export default function Home() {
                   </div>
                   <span className="product-category">{product.category}</span>
                 </div>
-                <button
-                  className="btn btn-primary btn-sm btn-full"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    addToCart(product.id);
-                  }}
-                >
-                  <ShoppingCart size={13} /> + Keranjang
-                </button>
+                <ClickSpark sparkColor="#ee4d2d" sparkCount={10} sparkRadius={18}>
+                  <button
+                    className="btn btn-primary btn-sm btn-full"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      addToCart(product.id);
+                    }}
+                  >
+                    <ShoppingCart size={13} /> + Keranjang
+                  </button>
+                </ClickSpark>
               </div>
             </Link>
           ))}

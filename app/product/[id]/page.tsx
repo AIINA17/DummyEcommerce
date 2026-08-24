@@ -17,6 +17,10 @@ import {
   Minus,
   Plus,
 } from "lucide-react";
+import BlurText from "@/app/components/reactbits/BlurText/BlurText";
+import TiltedCard from "@/app/components/reactbits/TiltedCard/TiltedCard";
+import ClickSpark from "@/app/components/reactbits/ClickSpark/ClickSpark";
+import StarBorder from "@/app/components/reactbits/StarBorder/StarBorder";
 
 /* =======================  TYPES  ======================= */
 interface Product {
@@ -434,22 +438,34 @@ export default function ProductDetail() {
                 marginTop: "auto",
               }}
             >
-              <button
-                className="btn btn-outline"
-                style={{ padding: "14px", flex: 1 }}
-                onClick={addToCart}
-                disabled={product.stock === 0}
+              <ClickSpark
+                sparkColor="#ee4d2d"
+                sparkCount={10}
+                sparkRadius={18}
+                style={{ flex: 1 }}
               >
-                <ShoppingCart size={16} /> Keranjang
-              </button>
-              <button
-                className="btn btn-primary"
-                style={{ padding: "14px", flex: 1 }}
+                <button
+                  className="btn btn-outline btn-full"
+                  style={{ padding: "14px" }}
+                  onClick={addToCart}
+                  disabled={product.stock === 0}
+                >
+                  <ShoppingCart size={16} /> Keranjang
+                </button>
+              </ClickSpark>
+              <StarBorder
+                as="button"
+                style={{ flex: 1 }}
+                innerClassName="btn btn-primary"
+                color="#ffd280"
+                thickness={2}
                 onClick={buyNow}
                 disabled={product.stock === 0}
               >
-                <Zap size={16} /> Beli Sekarang
-              </button>
+                <span style={{ padding: "6px 0", display: "inline-flex", alignItems: "center", gap: 7 }}>
+                  <Zap size={16} /> Beli Sekarang
+                </span>
+              </StarBorder>
             </div>
           </div>
         </article>
@@ -458,15 +474,12 @@ export default function ProductDetail() {
         {related.length > 0 && (
           <section>
             <div style={{ marginBottom: 20 }}>
-              <h3
-                style={{
-                  fontSize: 20,
-                  fontWeight: 800,
-                  color: "var(--gray-900)",
-                }}
-              >
-                Produk Serupa
-              </h3>
+              <BlurText
+                text="Produk Serupa"
+                animateBy="words"
+                direction="top"
+                style={{ fontSize: 20, fontWeight: 800, color: "var(--gray-900)" }}
+              />
               <p
                 style={{ fontSize: 13, color: "var(--gray-500)", marginTop: 4 }}
               >
@@ -486,15 +499,21 @@ export default function ProductDetail() {
                     className="product-card"
                     style={{ animationDelay: `${i * 0.07}s` }}
                   >
-                    <div style={{ position: "relative", overflow: "hidden" }}>
-                      <img
-                        src={
+                    <div className="product-image">
+                      <TiltedCard
+                        imageSrc={
                           p.image_url ||
                           `https://picsum.photos/seed/${p.id}/400/400`
                         }
-                        alt={p.name}
-                        className="product-image"
-                        loading="lazy"
+                        altText={p.name}
+                        containerHeight="100%"
+                        containerWidth="100%"
+                        imageHeight="100%"
+                        imageWidth="100%"
+                        scaleOnHover={1.06}
+                        rotateAmplitude={10}
+                        showMobileWarning={false}
+                        showTooltip={false}
                       />
                       <div
                         style={{

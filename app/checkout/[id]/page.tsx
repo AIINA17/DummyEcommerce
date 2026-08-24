@@ -18,6 +18,8 @@ import {
 import PaymentMethodPicker from "@/app/components/PaymentMethodPicker";
 import OrderSummaryCard from "@/app/components/OrderSummaryCard";
 import { SERVICE_FEE } from "@/lib/constants";
+import BlurText from "@/app/components/reactbits/BlurText/BlurText";
+import StarBorder from "@/app/components/reactbits/StarBorder/StarBorder";
 
 /* =======================  TYPES  ======================= */
 interface Product {
@@ -178,7 +180,7 @@ export default function CheckoutProductPage() {
               <ShoppingBag size={20} />
             </div>
             <div>
-              <p className="section-header-title">Produk</p>
+              <BlurText text="Produk" className="section-header-title" />
               <p className="section-header-subtitle">
                 Detail barang yang dibeli
               </p>
@@ -296,7 +298,7 @@ export default function CheckoutProductPage() {
               <CreditCard size={20} />
             </div>
             <div>
-              <p className="section-header-title">Metode Pembayaran</p>
+              <BlurText text="Metode Pembayaran" className="section-header-title" />
               <p className="section-header-subtitle">
                 Pilih cara bayar yang nyaman
               </p>
@@ -313,7 +315,7 @@ export default function CheckoutProductPage() {
               <Receipt size={20} />
             </div>
             <div>
-              <p className="section-header-title">Rincian Pembayaran</p>
+              <BlurText text="Rincian Pembayaran" className="section-header-title" />
               <p className="section-header-subtitle">Detail biaya pesanan</p>
             </div>
           </div>
@@ -331,20 +333,25 @@ export default function CheckoutProductPage() {
               Rp {formatPrice(subtotal + SERVICE_FEE)}
             </p>
           </div>
-          <button
-            className="btn btn-primary"
-            style={{ padding: "14px 32px", flexShrink: 0 }}
+          <StarBorder
+            as="button"
+            style={{ flexShrink: 0 }}
+            innerClassName="btn btn-primary"
+            color="#ffd280"
+            thickness={2}
             disabled={submitting}
             onClick={handlePlaceOrder}
           >
-            {submitting ? (
-              <>
-                <span className="spinner-sm" /> Memproses...
-              </>
-            ) : (
-              "Bayar Sekarang"
-            )}
-          </button>
+            <span style={{ padding: "8px 24px", display: "inline-flex", alignItems: "center", gap: 7 }}>
+              {submitting ? (
+                <>
+                  <span className="spinner-sm" /> Memproses...
+                </>
+              ) : (
+                "Bayar Sekarang"
+              )}
+            </span>
+          </StarBorder>
         </div>
       </div>
 

@@ -12,6 +12,7 @@ import {
   Save,
   RotateCcw,
 } from "lucide-react";
+import ShinyText from "@/app/components/reactbits/ShinyText/ShinyText";
 
 /* =======================  TYPES  ======================= */
 interface UserData {
@@ -163,7 +164,14 @@ export default function ProfilePage() {
     <main className="main-container">
       {/* ── Hero ── */}
       <div className="page-hero">
-        <h1 className="page-title">Profil Saya</h1>
+        <h1 className="page-title">
+          <ShinyText
+            text="Profil Saya"
+            speed={3}
+            color="rgba(255, 255, 255, 0.85)"
+            shineColor="#ffffff"
+          />
+        </h1>
         <p className="page-subtitle">
           Kelola informasi profil untuk mengontrol akunmu
         </p>

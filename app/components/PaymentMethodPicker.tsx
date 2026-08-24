@@ -5,6 +5,7 @@
 // pembayaran selalu sama di kedua flow.
 
 import { Check } from "lucide-react";
+import SpotlightCard from "@/app/components/reactbits/SpotlightCard/SpotlightCard";
 
 export interface PaymentMethod {
   value: string;
@@ -34,9 +35,11 @@ export default function PaymentMethodPicker({
   return (
     <div className="payment-methods-grid">
       {PAYMENT_METHODS.map((method) => (
-        <button
+        <SpotlightCard
+          as="button"
           key={method.value}
           type="button"
+          spotlightColor="rgba(238, 77, 45, 0.25)"
           className={`payment-method-card${value === method.value ? " selected" : ""}`}
           onClick={() => onChange(method.value)}
         >
@@ -48,7 +51,7 @@ export default function PaymentMethodPicker({
           <div className="payment-method-check">
             <Check size={12} color="white" strokeWidth={3} />
           </div>
-        </button>
+        </SpotlightCard>
       ))}
     </div>
   );
