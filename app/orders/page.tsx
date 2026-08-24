@@ -1,7 +1,7 @@
 "use client";
 // app/orders/page.tsx — ACUAN STYLE
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
@@ -11,9 +11,6 @@ import {
   ShoppingBag,
   RefreshCw,
   CheckCircle2,
-  Truck,
-  PartyPopper,
-  XCircle,
   Clock,
   ChevronRight,
 } from "lucide-react";
@@ -35,14 +32,16 @@ interface Order {
   created_at: string;
   order_items: OrderItem[];
 }
-type TabId = "semua" | "pending" | "proses" | "selesai";
+type TabId = "semua" | "pending" | "paid";
 
 /* =======================  CONSTANTS  ======================= */
+// Sistem ini cuma pernah punya 2 status pesanan nyata: menunggu pembayaran
+// atau sudah dibayar — tidak ada alur pengiriman/kurir sungguhan. Tab &
+// status di bawah sengaja dibatasi supaya sesuai kenyataan sistem.
 const TABS: { id: TabId; label: string }[] = [
   { id: "semua", label: "Semua" },
-  { id: "pending", label: "Pending" },
-  { id: "proses", label: "Proses" },
-  { id: "selesai", label: "Selesai" },
+  { id: "pending", label: "Menunggu Pembayaran" },
+  { id: "paid", label: "Dibayar" },
 ];
 
 type StatusInfo = { label: string; icon: React.ReactNode; cls: string };
@@ -53,29 +52,15 @@ const STATUS_CONFIG: Record<string, StatusInfo> = {
     icon: <CheckCircle2 size={12} />,
     cls: "status-badge--success",
   },
-  shipped: {
-    label: "Dikirim",
-    icon: <Truck size={12} />,
-    cls: "status-badge--info",
-  },
-  completed: {
-    label: "Selesai",
-    icon: <PartyPopper size={12} />,
-    cls: "status-badge--success",
-  },
-  cancelled: {
-    label: "Dibatalkan",
-    icon: <XCircle size={12} />,
-    cls: "status-badge--error",
-  },
   default: {
-    label: "Menunggu",
+    label: "Menunggu Pembayaran",
     icon: <Clock size={12} />,
     cls: "status-badge--warning",
   },
 };
 
 const PAYMENT_LABELS: Record<string, string> = {
+  shopkupay: "ShopKu Pay",
   gopay: "GoPay",
   ovo: "OVO",
   shopee: "ShopeePay",
@@ -85,9 +70,8 @@ const PAYMENT_LABELS: Record<string, string> = {
 
 const TAB_FILTER: Record<TabId, (s: string) => boolean> = {
   semua: () => true,
-  pending: (s) => s === "pending" || s === "waiting",
-  proses: (s) => s === "paid" || s === "shipped",
-  selesai: (s) => s === "completed",
+  pending: (s) => s === "pending",
+  paid: (s) => s === "paid",
 };
 
 /* =======================  HELPERS  ======================= */
@@ -218,10 +202,10 @@ export default function OrdersPage() {
   const [activeTab, setActiveTab] = useState<TabId>("semua");
   const userId = session?.user?.id ? Number(session.user.id) : null;
 
-  const loadOrders = async () => {
+  const loadOrders = useCallback(async () => {
     if (!userId) return;
     try {
-      const res = await fetch(`/api/orders?user_id=${userId}`);
+      const res = await fetch("/api/orders");
       const { data } = await res.json();
       setOrders(data ?? []);
     } catch (err) {
@@ -229,7 +213,7 @@ export default function OrdersPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [userId]);
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -241,7 +225,7 @@ export default function OrdersPage() {
       const iv = setInterval(loadOrders, 10_000);
       return () => clearInterval(iv);
     }
-  }, [status, userId]);
+  }, [status, userId, router, loadOrders]);
 
   if (loading) return <LoadingState />;
   if (orders.length === 0) return <EmptyOrdersState />;

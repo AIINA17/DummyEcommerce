@@ -1,7 +1,7 @@
 "use client";
 // app/profile/page.tsx
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
@@ -60,11 +60,11 @@ export default function ProfilePage() {
 
   const userId = session?.user?.id ? Number(session.user.id) : null;
 
-  async function loadUser() {
+  const loadUser = useCallback(async () => {
     if (!userId) return;
     setLoading(true);
     try {
-      const res = await fetch(`/api/user?user_id=${userId}`);
+      const res = await fetch("/api/user");
       const data = await res.json();
       if (data.data) {
         setUser(data.data);
@@ -80,7 +80,7 @@ export default function ProfilePage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [userId]);
 
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
@@ -100,7 +100,7 @@ export default function ProfilePage() {
       const res = await fetch("/api/user", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ user_id: userId, ...formData }),
+        body: JSON.stringify(formData),
       });
       const data = await res.json();
       if (res.ok) {
@@ -127,7 +127,7 @@ export default function ProfilePage() {
       return;
     }
     if (status === "authenticated" && userId) loadUser();
-  }, [status, userId]);
+  }, [status, userId, router, loadUser]);
 
   /* ── States ── */
   if (loading) {

@@ -23,9 +23,16 @@ export async function GET(request: NextRequest) {
     let query = supabase.from("products").select("*");
 
     // Filter by search query (nama produk DAN deskripsi)
-    // Pake OR filter untuk search di multiple columns
+    // Pake OR filter untuk search di multiple columns.
+    // PostgREST's filter DSL treats `,` `(` `)` `:` as syntax, not literal
+    // characters — so a search query containing them could otherwise inject
+    // extra filter conditions. Per PostgREST's own escaping rule, a value
+    // with reserved characters must be wrapped in double quotes, with `"`
+    // and `\` inside it backslash-escaped.
     if (q) {
-      query = query.or(`name.ilike.%${q}%,description.ilike.%${q}%`);
+      const escaped = q.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+      const safeQ = `"%${escaped}%"`;
+      query = query.or(`name.ilike.${safeQ},description.ilike.${safeQ}`);
     }
 
     // Filter by category
@@ -34,18 +41,21 @@ export async function GET(request: NextRequest) {
     }
 
     // Filter by min price
-    if (min) {
-      query = query.gte("price", parseInt(min));
+    const minPrice = parseInt(min);
+    if (min && Number.isFinite(minPrice)) {
+      query = query.gte("price", minPrice);
     }
 
     // Filter by max price
-    if (max) {
-      query = query.lte("price", parseInt(max));
+    const maxPrice = parseInt(max);
+    if (max && Number.isFinite(maxPrice)) {
+      query = query.lte("price", maxPrice);
     }
 
     // Filter by minimum rating
-    if (rating) {
-      query = query.gte("rating", parseFloat(rating));
+    const minRating = parseFloat(rating);
+    if (rating && Number.isFinite(minRating)) {
+      query = query.gte("rating", minRating);
     }
 
     // Sorting

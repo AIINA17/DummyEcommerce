@@ -1,31 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabase } from "@/lib/supabase";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
-import { verifyToken } from "@/lib/jwt";
-
-// Helper: Get user_id from JWT token OR session
-async function getUserId(req: NextRequest): Promise<number | null> {
-  // 1. Check JWT token first (for AI agent)
-  const jwtPayload = verifyToken(req);
-  if (jwtPayload?.userId) {
-    return jwtPayload.userId;
-  }
-
-  // 2. Fallback to NextAuth session (for website)
-  const session = await getServerSession(authOptions);
-  if (session?.user?.id) {
-    return Number(session.user.id);
-  }
-
-  return null;
-}
+import { getAuthUserId } from "@/lib/jwt";
 
 export async function POST(
   req: NextRequest,
   ctx: { params: Promise<{ id: string }> }
 ) {
-  const user_id = await getUserId(req);
+  const user_id = await getAuthUserId(req);
 
   if (!user_id) {
     return NextResponse.json(

@@ -2,7 +2,7 @@
 // app/order/[id]/page.tsx
 
 import { useParams, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import {
   ArrowLeft,
@@ -11,8 +11,6 @@ import {
   ShoppingBag,
   CreditCard,
   CheckCircle2,
-  Truck,
-  PartyPopper,
   XCircle,
   Clock,
 } from "lucide-react";
@@ -45,21 +43,6 @@ const STATUS_CONFIG: Record<string, StatusInfo> = {
     icon: <CheckCircle2 size={12} />,
     cls: "status-badge--success",
   },
-  shipped: {
-    label: "Dikirim",
-    icon: <Truck size={12} />,
-    cls: "status-badge--info",
-  },
-  completed: {
-    label: "Selesai",
-    icon: <PartyPopper size={12} />,
-    cls: "status-badge--success",
-  },
-  cancelled: {
-    label: "Dibatalkan",
-    icon: <XCircle size={12} />,
-    cls: "status-badge--error",
-  },
   default: {
     label: "Menunggu Pembayaran",
     icon: <Clock size={12} />,
@@ -68,6 +51,7 @@ const STATUS_CONFIG: Record<string, StatusInfo> = {
 };
 
 const PAYMENT_LABELS: Record<string, string> = {
+  shopkupay: "ShopKu Pay",
   gopay: "GoPay",
   ovo: "OVO",
   shopee: "ShopeePay",
@@ -92,8 +76,16 @@ export default function OrderDetail() {
   const [order, setOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(true);
   const [paying, setPaying] = useState(false);
+  const [toast, setToast] = useState<{ message: string; type: string } | null>(
+    null,
+  );
 
-  const loadOrder = async () => {
+  const showToast = (message: string, type: string) => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 3000);
+  };
+
+  const loadOrder = useCallback(async () => {
     try {
       const res = await fetch(`/api/orders/${id}`);
       const data = await res.json();
@@ -103,15 +95,21 @@ export default function OrderDetail() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [id]);
 
   const handlePay = async () => {
     setPaying(true);
     try {
-      await fetch(`/api/orders/${id}/pay`, { method: "POST" });
-      loadOrder();
+      const res = await fetch(`/api/orders/${id}/pay`, { method: "POST" });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        showToast(data.message || "Pembayaran gagal", "error");
+        return;
+      }
+      await loadOrder();
     } catch (err) {
       console.error("Error paying:", err);
+      showToast("Terjadi kesalahan saat memproses pembayaran", "error");
     } finally {
       setPaying(false);
     }
@@ -121,7 +119,7 @@ export default function OrderDetail() {
     loadOrder();
     const iv = setInterval(loadOrder, 10_000);
     return () => clearInterval(iv);
-  }, [id]);
+  }, [loadOrder]);
 
   /* ── States ── */
   if (loading) {
@@ -151,6 +149,14 @@ export default function OrderDetail() {
   }
 
   const statusInfo = getStatusInfo(order.status);
+  // order.total sudah termasuk biaya layanan. Turunkan subtotal produk dari
+  // item pesanan sendiri (bukan konstanta SERVICE_FEE saat ini) supaya
+  // rinciannya tetap akurat untuk pesanan lama sekalipun.
+  const itemsSubtotal = order.order_items.reduce(
+    (sum, item) => sum + item.price_at_purchase * item.quantity,
+    0,
+  );
+  const serviceFee = order.total - itemsSubtotal;
 
   return (
     <div className="page-container">
@@ -234,43 +240,13 @@ export default function OrderDetail() {
 
         {/* Items Card */}
         <div className="card">
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 12,
-              marginBottom: 16,
-              paddingBottom: 14,
-              borderBottom: "1px solid var(--gray-200)",
-            }}
-          >
-            <div
-              style={{
-                width: 42,
-                height: 42,
-                borderRadius: "var(--radius-lg)",
-                background: "var(--primary-50)",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                color: "var(--primary)",
-              }}
-            >
+          <div className="section-header">
+            <div className="section-header-icon">
               <ShoppingBag size={20} />
             </div>
             <div>
-              <p
-                style={{
-                  fontWeight: 700,
-                  fontSize: 14,
-                  color: "var(--gray-900)",
-                }}
-              >
-                Produk Dipesan
-              </p>
-              <p
-                style={{ fontSize: 12, color: "var(--gray-500)", marginTop: 2 }}
-              >
+              <p className="section-header-title">Produk Dipesan</p>
+              <p className="section-header-subtitle">
                 {order.order_items.length} item dalam pesanan ini
               </p>
             </div>
@@ -315,43 +291,13 @@ export default function OrderDetail() {
 
         {/* Payment Card */}
         <div className="card">
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 12,
-              marginBottom: 16,
-              paddingBottom: 14,
-              borderBottom: "1px solid var(--gray-200)",
-            }}
-          >
-            <div
-              style={{
-                width: 42,
-                height: 42,
-                borderRadius: "var(--radius-lg)",
-                background: "var(--primary-50)",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                color: "var(--primary)",
-              }}
-            >
+          <div className="section-header">
+            <div className="section-header-icon">
               <CreditCard size={20} />
             </div>
             <div>
-              <p
-                style={{
-                  fontWeight: 700,
-                  fontSize: 14,
-                  color: "var(--gray-900)",
-                }}
-              >
-                Metode Pembayaran
-              </p>
-              <p
-                style={{ fontSize: 12, color: "var(--gray-500)", marginTop: 2 }}
-              >
+              <p className="section-header-title">Metode Pembayaran</p>
+              <p className="section-header-subtitle">
                 {getPaymentLabel(order.payment_method)}
               </p>
             </div>
@@ -360,13 +306,17 @@ export default function OrderDetail() {
           <div className="order-summary">
             <div className="order-summary-row">
               <span>Total Harga Produk</span>
-              <span>Rp {formatPrice(order.total)}</span>
+              <span>Rp {formatPrice(itemsSubtotal)}</span>
             </div>
             <div className="order-summary-row">
               <span>Ongkos Kirim</span>
               <span style={{ color: "var(--success)", fontWeight: 600 }}>
                 Gratis
               </span>
+            </div>
+            <div className="order-summary-row">
+              <span>Biaya Layanan</span>
+              <span>Rp {formatPrice(serviceFee)}</span>
             </div>
             <div className="order-summary-row order-summary-row--total">
               <span>Total Pembayaran</span>
@@ -403,6 +353,8 @@ export default function OrderDetail() {
           </div>
         </div>
       )}
+
+      {toast && <div className={`toast ${toast.type}`}>{toast.message}</div>}
     </div>
   );
 }

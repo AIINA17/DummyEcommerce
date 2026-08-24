@@ -6,6 +6,10 @@ declare module "next-auth" {
             id: string;
         } & DefaultSession["user"];
     }
+
+    interface User {
+        id: string;
+    }
 }
 
 declare module "next-auth/jwt" {

@@ -9,14 +9,16 @@ export default withAuth({
 export const config = {
   matcher: [
     /*
-      Match SEMUA halaman,
-      KECUALI:
-      - /login
-      - /register
-      - /api (biar API tetap bisa diakses)
-      - /_next (asset Next.js)
-      - /favicon.ico
+      Hanya proteksi halaman yang benar-benar butuh login.
+      Home ("/") dan "/product/*" harus tetap bisa dijelajahi tamu —
+      halaman-halaman itu sendiri sudah menangani status guest
+      (prompt login saat "Tambah ke Keranjang"), jadi middleware tidak
+      boleh mendahului dengan redirect paksa ke /login.
     */
-    "/((?!login|register|api|_next|favicon.ico).*)",
+    "/cart/:path*",
+    "/checkout/:path*",
+    "/orders/:path*",
+    "/order/:path*",
+    "/profile/:path*",
   ],
 }

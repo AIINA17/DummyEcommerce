@@ -1,7 +1,7 @@
 "use client";
 // app/cart/page.tsx
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
@@ -84,11 +84,11 @@ export default function CartPage() {
   const userId = session?.user?.id ? Number(session.user.id) : null;
 
   /* ── Data ── */
-  async function loadCart() {
+  const loadCart = useCallback(async () => {
     if (!userId) return;
     setLoading(true);
     try {
-      const res = await fetch(`/api/cart?user_id=${userId}`);
+      const res = await fetch("/api/cart");
       const data = await res.json();
       setCartItems(
         (data.data || []).map((item: CartItem) => ({
@@ -101,7 +101,7 @@ export default function CartPage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [userId]);
 
   async function updateQuantity(cartId: number, newQty: number) {
     try {
@@ -164,7 +164,7 @@ export default function CartPage() {
       return;
     }
     if (status === "authenticated" && userId) loadCart();
-  }, [status, userId]);
+  }, [status, userId, router, loadCart]);
 
   /* ── Derived ── */
   const selectedItems = cartItems.filter((i) => i.selected);
@@ -280,6 +280,7 @@ export default function CartPage() {
                   <button
                     className="qty-btn"
                     onClick={() => updateQuantity(item.id, item.quantity + 1)}
+                    disabled={item.quantity >= item.products.stock}
                     aria-label="Tambah"
                   >
                     <Plus size={13} />

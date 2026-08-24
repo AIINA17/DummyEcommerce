@@ -75,7 +75,6 @@ export default function Home() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          user_id: userId,
           product_id: productId,
           quantity: 1,
         }),
@@ -106,8 +105,13 @@ export default function Home() {
     setSort("");
   };
 
+  // Muat produk sekali saat halaman dibuka. Filter di bawah baru diterapkan
+  // lewat tombol "Terapkan Filter" / Enter, bukan otomatis tiap state
+  // berubah — jadi loadProducts sengaja tidak dimasukkan ke dependency
+  // array (kalau dimasukkan, tiap ketikan akan memicu refetch).
   useEffect(() => {
     loadProducts();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (

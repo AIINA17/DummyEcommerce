@@ -1,49 +1,56 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabase } from "@/lib/supabase";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
-import { verifyToken } from "@/lib/jwt";
+import { pool } from "@/lib/db";
+import { getAuthUserId } from "@/lib/jwt";
+import { SERVICE_FEE } from "@/lib/constants";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function toNumber(value: unknown): number | null {
-  if (typeof value === "number" && Number.isFinite(value)) return value;
-  if (typeof value === "string" && value.trim() !== "") {
-    const n = Number(value);
-    return Number.isFinite(n) ? n : null;
+function toPositiveInt(value: unknown): number | null {
+  const n = typeof value === "string" ? Number(value) : value;
+  if (typeof n !== "number" || !Number.isFinite(n) || !Number.isInteger(n) || n <= 0) {
+    return null;
   }
-  return null;
+  return n;
 }
 
-type OrderItemInput = {
-  product_id: number;
-  quantity: number;
-  price: number;
-  name: string;
-};
+type RequestedItem = { product_id: number; quantity: number };
 
-// Helper: Get user_id from JWT token OR session
-async function getUserId(req: NextRequest): Promise<number | null> {
-  // 1. Check JWT token first (for AI agent)
-  const jwtPayload = verifyToken(req);
-  if (jwtPayload?.userId) {
-    return jwtPayload.userId;
+// Kembalikan stok yang sudah terlanjur dikurangi (dipakai saat rollback).
+async function restoreStock(reserved: { product_id: number; quantity: number }[]) {
+  for (const item of reserved) {
+    try {
+      await pool.query("UPDATE products SET stock = stock + $1 WHERE id = $2", [
+        item.quantity,
+        item.product_id,
+      ]);
+    } catch (err) {
+      console.error("Failed to restore stock:", err);
+    }
   }
+}
 
-  // 2. Fallback to NextAuth session (for website)
-  const session = await getServerSession(authOptions);
-  if (session?.user?.id) {
-    return Number(session.user.id);
+// Kembalikan saldo ShopKu Pay yang sudah terlanjur dipotong (dipakai saat rollback).
+async function restoreBalance(userId: number, amount: number) {
+  const { data: current } = await supabase
+    .from("users")
+    .select("balance")
+    .eq("id", userId)
+    .single();
+  if (current) {
+    const { error } = await supabase
+      .from("users")
+      .update({ balance: Number(current.balance) + amount })
+      .eq("id", userId);
+    if (error) console.error("Failed to restore balance:", error);
   }
-
-  return null;
 }
 
 // GET orders of logged-in user
 export async function GET(req: NextRequest) {
-  const user_id = await getUserId(req);
+  const user_id = await getAuthUserId(req);
 
   if (!user_id) {
     return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
@@ -78,7 +85,7 @@ export async function GET(req: NextRequest) {
 
 // POST create new order
 export async function POST(req: NextRequest) {
-  const user_id = await getUserId(req);
+  const user_id = await getAuthUserId(req);
 
   if (!user_id) {
     return NextResponse.json(
@@ -114,8 +121,11 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const items: OrderItemInput[] = [];
-
+  // Hanya percaya product_id & quantity dari client. Harga & nama produk
+  // SELALU diambil dari database di bawah — jangan pernah pakai price/name
+  // yang dikirim client, supaya request yang dimodifikasi tidak bisa
+  // membeli barang dengan harga sembarangan.
+  const requested: RequestedItem[] = [];
   for (const raw of items_raw) {
     if (!isRecord(raw)) {
       return NextResponse.json(
@@ -123,38 +133,83 @@ export async function POST(req: NextRequest) {
         { status: 400 }
       );
     }
-
-    const product_id = toNumber(raw.product_id);
-    const quantity = toNumber(raw.quantity);
-    const price = toNumber(raw.price);
-    const name = typeof raw.name === "string" ? raw.name : null;
-
-    if (!product_id || !quantity || !price || !name) {
+    const product_id = toPositiveInt(raw.product_id);
+    const quantity = toPositiveInt(raw.quantity);
+    if (!product_id || !quantity) {
       return NextResponse.json(
         { success: false, message: "Invalid items payload" },
         { status: 400 }
       );
     }
-
-    items.push({ product_id, quantity, price, name });
+    requested.push({ product_id, quantity });
   }
 
   const payment_method =
-    typeof payment_method_raw === "string" &&
-    payment_method_raw.trim() !== ""
+    typeof payment_method_raw === "string" && payment_method_raw.trim() !== ""
       ? payment_method_raw
       : undefined;
 
-  const normalizedPayment = payment_method
-    ?.toUpperCase()
-    .replace(/\s/g, "_");
+  const normalizedPayment = payment_method?.toUpperCase().replace(/\s/g, "_");
 
-  const total = items.reduce(
-    (sum, item) => sum + item.price * item.quantity,
-    0
-  );
+  // Ambil harga, nama, dan stok TERKINI dari database (bukan dari client).
+  const productIds = requested.map((i) => i.product_id);
+  const { data: products, error: productsError } = await supabase
+    .from("products")
+    .select("id, name, price, stock")
+    .in("id", productIds);
+
+  if (productsError) {
+    return NextResponse.json(
+      { success: false, message: productsError.message },
+      { status: 500 }
+    );
+  }
+
+  const productById = new Map((products || []).map((p) => [p.id, p]));
+  for (const item of requested) {
+    const product = productById.get(item.product_id);
+    if (!product) {
+      return NextResponse.json(
+        { success: false, message: `Produk ${item.product_id} tidak ditemukan` },
+        { status: 404 }
+      );
+    }
+    if (product.stock < item.quantity) {
+      return NextResponse.json(
+        { success: false, message: `Stok "${product.name}" tidak mencukupi` },
+        { status: 400 }
+      );
+    }
+  }
+
+  const itemsTotal = requested.reduce((sum, item) => {
+    const product = productById.get(item.product_id)!;
+    return sum + Number(product.price) * item.quantity;
+  }, 0);
+  const total = itemsTotal + SERVICE_FEE;
+
+  // Kurangi stok secara atomic per produk (guard "stock >= quantity" di level
+  // SQL supaya aman dari race condition dua request yang datang bersamaan).
+  // Kalau salah satu gagal, kembalikan stok yang sudah sempat dikurangi.
+  const reserved: { product_id: number; quantity: number }[] = [];
+  for (const item of requested) {
+    const result = await pool.query(
+      "UPDATE products SET stock = stock - $1 WHERE id = $2 AND stock >= $1 RETURNING stock",
+      [item.quantity, item.product_id]
+    );
+    if (result.rowCount === 0) {
+      await restoreStock(reserved);
+      const product = productById.get(item.product_id)!;
+      return NextResponse.json(
+        { success: false, message: `Stok "${product.name}" tidak mencukupi` },
+        { status: 400 }
+      );
+    }
+    reserved.push(item);
+  }
 
   // ShopKu Pay logic
+  let balanceDeducted = false;
   if (normalizedPayment === "SHOPKUPAY") {
     const { data: user, error: userError } = await supabase
       .from("users")
@@ -163,6 +218,7 @@ export async function POST(req: NextRequest) {
       .single();
 
     if (userError || !user) {
+      await restoreStock(reserved);
       return NextResponse.json(
         { success: false, message: "User not found" },
         { status: 404 }
@@ -172,27 +228,26 @@ export async function POST(req: NextRequest) {
     const balance = Number(user.balance);
 
     if (balance < total) {
+      await restoreStock(reserved);
       return NextResponse.json(
         { success: false, message: "Insufficient ShopKu Pay balance" },
         { status: 400 }
       );
     }
 
-    const { data: updatedUser, error: updateError } = await supabase
+    const { error: updateError } = await supabase
       .from("users")
       .update({ balance: balance - total })
-      .eq("id", user_id)
-      .select()
-      .single();
-
-    console.log("UPDATE RESULT:", updatedUser, updateError);
+      .eq("id", user_id);
 
     if (updateError) {
+      await restoreStock(reserved);
       return NextResponse.json(
         { success: false, message: updateError.message },
         { status: 500 }
       );
     }
+    balanceDeducted = true;
   }
 
   // Create order
@@ -208,19 +263,24 @@ export async function POST(req: NextRequest) {
     .single();
 
   if (orderError) {
+    await restoreStock(reserved);
+    if (balanceDeducted) await restoreBalance(user_id, total);
     return NextResponse.json(
       { success: false, message: orderError.message },
       { status: 500 }
     );
   }
 
-  const orderItems = items.map((item) => ({
-    order_id: order.id,
-    product_id: item.product_id,
-    quantity: item.quantity,
-    price_at_purchase: item.price,
-    name_snapshot: item.name,
-  }));
+  const orderItems = requested.map((item) => {
+    const product = productById.get(item.product_id)!;
+    return {
+      order_id: order.id,
+      product_id: item.product_id,
+      quantity: item.quantity,
+      price_at_purchase: product.price,
+      name_snapshot: product.name,
+    };
+  });
 
   const { error: itemsError } = await supabase
     .from("order_items")
@@ -228,6 +288,8 @@ export async function POST(req: NextRequest) {
 
   if (itemsError) {
     await supabase.from("orders").delete().eq("id", order.id);
+    await restoreStock(reserved);
+    if (balanceDeducted) await restoreBalance(user_id, total);
     return NextResponse.json(
       { success: false, message: itemsError.message },
       { status: 500 }

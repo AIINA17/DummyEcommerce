@@ -11,8 +11,10 @@ import {
   CreditCard,
   Receipt,
   ShoppingCart,
-  Check,
 } from "lucide-react";
+import PaymentMethodPicker from "@/app/components/PaymentMethodPicker";
+import OrderSummaryCard from "@/app/components/OrderSummaryCard";
+import { SERVICE_FEE } from "@/lib/constants";
 
 /* =======================  TYPES  ======================= */
 interface Product {
@@ -29,38 +31,6 @@ interface CartItem {
   quantity: number;
   products: Product;
 }
-
-/* =======================  CONSTANTS  ======================= */
-const PAYMENT_METHODS = [
-  {
-    value: "VA_BCA",
-    label: "Virtual Account BCA",
-    desc: "ATM / m-Banking BCA",
-    icon: "🏦",
-  },
-  {
-    value: "VA_BRI",
-    label: "Virtual Account BRI",
-    desc: "Transfer cepat",
-    icon: "🏦",
-  },
-  {
-    value: "VA_Mandiri",
-    label: "Virtual Account Mandiri",
-    desc: "Pembayaran instan",
-    icon: "🏦",
-  },
-  { value: "GoPay", label: "GoPay", desc: "E-wallet terpopuler", icon: "💚" },
-  { value: "OVO", label: "OVO", desc: "Cashback s.d 10%", icon: "💜" },
-  {
-    value: "ShopeePay",
-    label: "ShopeePay",
-    desc: "Promo eksklusif",
-    icon: "🧡",
-  },
-  { value: "DANA", label: "DANA", desc: "Bayar praktis", icon: "💙" },
-  { value: "ShopKuPay", label: "ShopKuPay", desc: "Bayar praktis", icon: "❤️" },
-];
 
 /* =======================  HELPERS  ======================= */
 const formatPrice = (p: number) => new Intl.NumberFormat("id-ID").format(p);
@@ -92,7 +62,7 @@ function CheckoutContent() {
 
     setLoading(true);
     try {
-      const res = await fetch(`/api/cart?user_id=${userId}`);
+      const res = await fetch(`/api/cart`);
       const data = await res.json();
       const ids = selectedIds.split(",").map((id) => parseInt(id.trim()));
       const filtered = (data.data || []).filter((item: CartItem) =>
@@ -118,6 +88,7 @@ function CheckoutContent() {
       return;
     }
     if (status === "authenticated" && userId) loadCart();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status, userId, searchParams]);
 
   /* ── Derived ── */
@@ -131,10 +102,6 @@ function CheckoutContent() {
     }),
     [cartItems],
   );
-
-  const serviceFee = 1000;
-  const shippingCost = 0;
-  const totalPayment = subtotal + serviceFee + shippingCost;
 
   const showToast = (message: string, type: string) => {
     setToast({ message, type });
@@ -153,13 +120,10 @@ function CheckoutContent() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          user_id: userId,
           payment_method: payment,
           items: cartItems.map((item) => ({
             product_id: item.products.id,
             quantity: item.quantity,
-            price: item.products.price,
-            name: item.products.name,
           })),
         }),
       });
@@ -170,9 +134,24 @@ function CheckoutContent() {
         return;
       }
 
-      // Clear cart
-      for (const item of cartItems)
-        await fetch(`/api/cart?cart_id=${item.id}`, { method: "DELETE" });
+      // Bersihkan item yang sudah dibeli dari keranjang. Kalau ada yang
+      // gagal terhapus, tetap beri tahu user daripada diam-diam
+      // meninggalkan item yang sudah dibayar di keranjang.
+      const deleteResults = await Promise.all(
+        cartItems.map((item) =>
+          fetch(`/api/cart?cart_id=${item.id}`, { method: "DELETE" }).then(
+            (r) => r.ok,
+          ),
+        ),
+      );
+      if (deleteResults.some((ok) => !ok)) {
+        showToast(
+          "Pesanan berhasil dibuat, tapi ada item yang gagal dihapus dari keranjang",
+          "error",
+        );
+        setTimeout(() => router.push("/orders"), 2000);
+        return;
+      }
 
       showToast("Pesanan berhasil dibuat!", "success");
       setTimeout(() => router.push("/orders"), 1500);
@@ -236,45 +215,13 @@ function CheckoutContent() {
       <main className="page-main" style={{ paddingBottom: 100 }}>
         {/* Order Summary */}
         <div className="card">
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 12,
-              marginBottom: 16,
-              paddingBottom: 14,
-              borderBottom: "1px solid var(--gray-200)",
-            }}
-          >
-            <div
-              style={{
-                width: 42,
-                height: 42,
-                borderRadius: "var(--radius-lg)",
-                background: "var(--primary-50)",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                color: "var(--primary)",
-              }}
-            >
+          <div className="section-header">
+            <div className="section-header-icon">
               <ShoppingBag size={20} />
             </div>
             <div>
-              <p
-                style={{
-                  fontWeight: 700,
-                  fontSize: 14,
-                  color: "var(--gray-900)",
-                }}
-              >
-                Ringkasan Pesanan
-              </p>
-              <p
-                style={{ fontSize: 12, color: "var(--gray-500)", marginTop: 2 }}
-              >
-                {totalItems} produk
-              </p>
+              <p className="section-header-title">Ringkasan Pesanan</p>
+              <p className="section-header-subtitle">{totalItems} produk</p>
             </div>
           </div>
 
@@ -322,132 +269,34 @@ function CheckoutContent() {
 
         {/* Payment Methods */}
         <div className="card">
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 12,
-              marginBottom: 16,
-              paddingBottom: 14,
-              borderBottom: "1px solid var(--gray-200)",
-            }}
-          >
-            <div
-              style={{
-                width: 42,
-                height: 42,
-                borderRadius: "var(--radius-lg)",
-                background: "var(--primary-50)",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                color: "var(--primary)",
-              }}
-            >
+          <div className="section-header">
+            <div className="section-header-icon">
               <CreditCard size={20} />
             </div>
             <div>
-              <p
-                style={{
-                  fontWeight: 700,
-                  fontSize: 14,
-                  color: "var(--gray-900)",
-                }}
-              >
-                Metode Pembayaran
-              </p>
-              <p
-                style={{ fontSize: 12, color: "var(--gray-500)", marginTop: 2 }}
-              >
+              <p className="section-header-title">Metode Pembayaran</p>
+              <p className="section-header-subtitle">
                 Pilih cara bayar yang nyaman
               </p>
             </div>
           </div>
 
-          <div className="payment-methods-grid">
-            {PAYMENT_METHODS.map((method) => (
-              <button
-                key={method.value}
-                className={`payment-method-card${payment === method.value ? " selected" : ""}`}
-                onClick={() => setPayment(method.value)}
-              >
-                <div className="payment-method-icon">{method.icon}</div>
-                <div>
-                  <span className="payment-method-label">{method.label}</span>
-                  <span className="payment-method-desc">{method.desc}</span>
-                </div>
-                <div className="payment-method-check">
-                  <Check size={12} color="white" strokeWidth={3} />
-                </div>
-              </button>
-            ))}
-          </div>
+          <PaymentMethodPicker value={payment} onChange={setPayment} />
         </div>
 
         {/* Payment Detail */}
         <div className="card">
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 12,
-              marginBottom: 16,
-              paddingBottom: 14,
-              borderBottom: "1px solid var(--gray-200)",
-            }}
-          >
-            <div
-              style={{
-                width: 42,
-                height: 42,
-                borderRadius: "var(--radius-lg)",
-                background: "var(--primary-50)",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                color: "var(--primary)",
-              }}
-            >
+          <div className="section-header">
+            <div className="section-header-icon">
               <Receipt size={20} />
             </div>
             <div>
-              <p
-                style={{
-                  fontWeight: 700,
-                  fontSize: 14,
-                  color: "var(--gray-900)",
-                }}
-              >
-                Rincian Pembayaran
-              </p>
-              <p
-                style={{ fontSize: 12, color: "var(--gray-500)", marginTop: 2 }}
-              >
-                Detail biaya pesanan
-              </p>
+              <p className="section-header-title">Rincian Pembayaran</p>
+              <p className="section-header-subtitle">Detail biaya pesanan</p>
             </div>
           </div>
 
-          <div className="order-summary">
-            <div className="order-summary-row">
-              <span>Subtotal ({totalItems} produk)</span>
-              <span>Rp {formatPrice(subtotal)}</span>
-            </div>
-            <div className="order-summary-row">
-              <span>Ongkos Kirim</span>
-              <span style={{ color: "var(--success)", fontWeight: 600 }}>
-                Gratis
-              </span>
-            </div>
-            <div className="order-summary-row">
-              <span>Biaya Layanan</span>
-              <span>Rp {formatPrice(serviceFee)}</span>
-            </div>
-            <div className="order-summary-row order-summary-row--total">
-              <span>Total Pembayaran</span>
-              <span>Rp {formatPrice(totalPayment)}</span>
-            </div>
-          </div>
+          <OrderSummaryCard itemCount={totalItems} subtotal={subtotal} />
         </div>
       </main>
 
@@ -457,7 +306,7 @@ function CheckoutContent() {
           <div className="checkout-footer-total">
             <p className="checkout-footer-label">Total Pembayaran</p>
             <p className="checkout-footer-price">
-              Rp {formatPrice(totalPayment)}
+              Rp {formatPrice(subtotal + SERVICE_FEE)}
             </p>
           </div>
           <button

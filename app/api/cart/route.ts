@@ -1,47 +1,24 @@
 //app/api/cart/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { verifyToken } from "@/lib/jwt";
+import { getAuthUserId } from "@/lib/jwt";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
 
-// Helper: Get user_id from JWT token OR query param
-function getUserId(req: NextRequest, fromBody?: number): number | null {
-  // 1. Check JWT token first
-  const jwtPayload = verifyToken(req);
-  if (jwtPayload?.userId) {
-    return jwtPayload.userId;
-  }
-
-  // 2. Fallback to body (for backward compatibility)
-  if (fromBody) {
-    return fromBody;
-  }
-
-  // 3. Fallback to query param (for backward compatibility)
-  const { searchParams } = new URL(req.url);
-  const userIdParam = searchParams.get("user_id");
-  if (userIdParam) {
-    return parseInt(userIdParam);
-  }
-
-  return null;
-}
-
 // =====================================================
-// GET - Ambil semua item di cart user
+// GET - Ambil semua item di cart user yang sedang login
 // =====================================================
 export async function GET(request: NextRequest) {
   try {
-    const userId = getUserId(request);
+    const userId = await getAuthUserId(request);
 
     if (!userId) {
       return NextResponse.json(
-        { success: false, error: "user_id is required or provide valid token" },
-        { status: 400 }
+        { success: false, error: "Unauthorized" },
+        { status: 401 }
       );
     }
 
@@ -68,22 +45,21 @@ export async function GET(request: NextRequest) {
 }
 
 // =====================================================
-// POST - Tambah item ke cart
+// POST - Tambah item ke cart user yang sedang login
 // =====================================================
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
-    const { product_id, quantity = 1 } = body;
-
-    // Get user_id from token or body
-    const userId = getUserId(request, body.user_id);
+    const userId = await getAuthUserId(request);
 
     if (!userId) {
       return NextResponse.json(
-        { success: false, error: "user_id is required or provide valid token" },
-        { status: 400 }
+        { success: false, error: "Unauthorized" },
+        { status: 401 }
       );
     }
+
+    const body = await request.json();
+    const { product_id, quantity = 1 } = body;
 
     if (!product_id) {
       return NextResponse.json(
@@ -135,10 +111,19 @@ export async function POST(request: NextRequest) {
 }
 
 // =====================================================
-// PUT - Update quantity item di cart
+// PUT - Update quantity item di cart (hanya milik sendiri)
 // =====================================================
 export async function PUT(request: NextRequest) {
   try {
+    const userId = await getAuthUserId(request);
+
+    if (!userId) {
+      return NextResponse.json(
+        { success: false, error: "Unauthorized" },
+        { status: 401 }
+      );
+    }
+
     const body = await request.json();
     const { cart_id, quantity } = body;
 
@@ -147,6 +132,20 @@ export async function PUT(request: NextRequest) {
         { success: false, error: "cart_id and quantity are required" },
         { status: 400 }
       );
+    }
+
+    // Pastikan cart item ini benar milik user yang sedang login
+    const { data: existing, error: findError } = await supabase
+      .from("cart")
+      .select("id, user_id")
+      .eq("id", cart_id)
+      .single();
+
+    if (findError || !existing) {
+      return NextResponse.json({ success: false, error: "Cart item not found" }, { status: 404 });
+    }
+    if (existing.user_id !== userId) {
+      return NextResponse.json({ success: false, error: "Forbidden" }, { status: 403 });
     }
 
     // Kalau quantity 0 atau kurang, hapus item
@@ -183,15 +182,38 @@ export async function PUT(request: NextRequest) {
 }
 
 // =====================================================
-// DELETE - Hapus item dari cart
+// DELETE - Hapus item dari cart (hanya milik sendiri)
 // =====================================================
 export async function DELETE(request: NextRequest) {
   try {
+    const userId = await getAuthUserId(request);
+
+    if (!userId) {
+      return NextResponse.json(
+        { success: false, error: "Unauthorized" },
+        { status: 401 }
+      );
+    }
+
     const { searchParams } = new URL(request.url);
     const cartId = searchParams.get("cart_id");
 
-    if (!cartId) {
+    if (!cartId || !Number.isFinite(parseInt(cartId))) {
       return NextResponse.json({ success: false, error: "cart_id is required" }, { status: 400 });
+    }
+
+    // Pastikan cart item ini benar milik user yang sedang login
+    const { data: existing, error: findError } = await supabase
+      .from("cart")
+      .select("id, user_id")
+      .eq("id", parseInt(cartId))
+      .single();
+
+    if (findError || !existing) {
+      return NextResponse.json({ success: false, error: "Cart item not found" }, { status: 404 });
+    }
+    if (existing.user_id !== userId) {
+      return NextResponse.json({ success: false, error: "Forbidden" }, { status: 403 });
     }
 
     const { error } = await supabase

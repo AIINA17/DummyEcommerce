@@ -2,6 +2,7 @@
 // components/Navbar.tsx
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useState, useEffect } from "react";
 import { signOut, useSession } from "next-auth/react";
 import {
@@ -15,13 +16,14 @@ import {
   ChevronDown,
   User,
   LogOut,
-  CreditCard,
 } from "lucide-react";
 
 export default function Navbar() {
   const { data: session } = useSession();
+  const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const [balance, setBalance] = useState<number | null>(null);
+  const [cartCount, setCartCount] = useState(0);
   const [darkMode, setDarkMode] = useState(false);
 
   useEffect(() => {
@@ -34,7 +36,41 @@ export default function Navbar() {
   }, [session]);
 
   useEffect(() => {
+    if (!session) return;
+    const loadCartCount = () => {
+      fetch("/api/cart")
+        .then((r) => r.json())
+        .then((r) => {
+          if (r.success) {
+            setCartCount(
+              (r.data || []).reduce(
+                (sum: number, item: { quantity: number }) => sum + item.quantity,
+                0,
+              ),
+            );
+          }
+        })
+        .catch(() => {});
+    };
+    loadCartCount();
+    const iv = setInterval(loadCartCount, 10_000);
+    return () => clearInterval(iv);
+  }, [session]);
+
+  const isActive = (href: string) => {
+    if (href === "/") return pathname === "/";
+    if (href === "/cart") return pathname.startsWith("/cart") || pathname.startsWith("/checkout");
+    if (href === "/orders") return pathname.startsWith("/orders") || pathname.startsWith("/order/");
+    return pathname.startsWith(href);
+  };
+
+  useEffect(() => {
+    // Baca localStorage cuma bisa dilakukan client-side. Sengaja lewat
+    // effect (bukan lazy initializer di useState) supaya render pertama
+    // saat hydration tetap sama dengan HTML dari server — kalau langsung
+    // dibaca saat init, ikon Sun/Moon bisa mismatch dengan hasil SSR.
     const isDark = localStorage.getItem("theme") === "dark";
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setDarkMode(isDark);
     if (isDark) document.documentElement.classList.add("dark");
   }, []);
@@ -77,13 +113,16 @@ export default function Navbar() {
 
       {/* ── Links ── */}
       <div className="navbar-links">
-        <Link href="/" className="navbar-link">
+        <Link href="/" className={`navbar-link${isActive("/") ? " active" : ""}`}>
           <Home size={16} /> <span>Home</span>
         </Link>
-        <Link href="/cart" className="navbar-link">
+        <Link href="/cart" className={`navbar-link${isActive("/cart") ? " active" : ""}`}>
           <ShoppingCart size={16} /> <span>Keranjang</span>
+          {session && cartCount > 0 && (
+            <span className="cart-badge">{cartCount}</span>
+          )}
         </Link>
-        <Link href="/orders" className="navbar-link">
+        <Link href="/orders" className={`navbar-link${isActive("/orders") ? " active" : ""}`}>
           <ClipboardList size={16} /> <span>Pesanan</span>
         </Link>
 

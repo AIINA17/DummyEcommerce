@@ -2,13 +2,13 @@
 // app/product/[id]/page.tsx
 
 import { useParams, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
 import {
   ArrowLeft,
   ShoppingCart,
-  Eye,
+  Zap,
   Star,
   CheckCircle2,
   AlertTriangle,
@@ -85,7 +85,7 @@ export default function ProductDetail() {
   } | null>(null);
 
   /* ── Data ── */
-  const loadProduct = async () => {
+  const loadProduct = useCallback(async () => {
     setLoading(true);
     try {
       const res = await fetch(`/api/products/${id}`);
@@ -116,7 +116,7 @@ export default function ProductDetail() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [id]);
 
   const addToCart = async () => {
     if (!userId || status !== "authenticated") {
@@ -129,7 +129,6 @@ export default function ProductDetail() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          user_id: userId,
           product_id: product?.id,
           quantity,
         }),
@@ -145,6 +144,15 @@ export default function ProductDetail() {
     }
   };
 
+  const buyNow = () => {
+    if (!userId || status !== "authenticated") {
+      showToast("Silakan login terlebih dahulu", "error");
+      setTimeout(() => router.push("/login"), 1500);
+      return;
+    }
+    router.push(`/checkout/${product?.id}?qty=${quantity}`);
+  };
+
   const showToast = (message: string, type: "success" | "error") => {
     setToast({ message, type });
     setTimeout(() => setToast(null), 3000);
@@ -155,7 +163,7 @@ export default function ProductDetail() {
       loadProduct();
       window.scrollTo({ top: 0, behavior: "smooth" });
     }
-  }, [id]);
+  }, [id, loadProduct]);
 
   /* ── Loading / Not Found ── */
   if (loading) {
@@ -422,27 +430,26 @@ export default function ProductDetail() {
             <div
               style={{
                 display: "flex",
-                flexDirection: "column",
                 gap: 10,
                 marginTop: "auto",
               }}
             >
               <button
-                className="btn btn-primary"
-                style={{ padding: "14px" }}
+                className="btn btn-outline"
+                style={{ padding: "14px", flex: 1 }}
                 onClick={addToCart}
                 disabled={product.stock === 0}
               >
-                <ShoppingCart size={16} /> Tambah ke Keranjang
+                <ShoppingCart size={16} /> Keranjang
               </button>
-              <Link href="/cart" style={{ display: "block" }}>
-                <button
-                  className="btn btn-secondary btn-full"
-                  style={{ padding: "13px" }}
-                >
-                  <Eye size={16} /> Lihat Keranjang
-                </button>
-              </Link>
+              <button
+                className="btn btn-primary"
+                style={{ padding: "14px", flex: 1 }}
+                onClick={buyNow}
+                disabled={product.stock === 0}
+              >
+                <Zap size={16} /> Beli Sekarang
+              </button>
             </div>
           </div>
         </article>

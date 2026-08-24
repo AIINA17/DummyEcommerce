@@ -1,7 +1,13 @@
+// eslint-disable-next-line @typescript-eslint/no-require-imports -- plain Node/CommonJS debug script, run directly via `node test-db.js`
 const { Pool } = require('pg');
 
+if (!process.env.DATABASE_URL) {
+  console.error('DATABASE_URL is not set. Load your .env.local before running this script.');
+  process.exit(1);
+}
+
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL || 'postgresql://postgres:kebelet_eek@db.wboqimudhbpheqloamch.supabase.co:5432/postgres',
+  connectionString: process.env.DATABASE_URL,
   ssl: { rejectUnauthorized: false }
 });
 
