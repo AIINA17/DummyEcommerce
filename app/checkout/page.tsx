@@ -1,355 +1,246 @@
 "use client";
-// app/checkout/page.tsx
 
 import { Suspense, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
-import {
-  ArrowLeft,
-  ShoppingBag,
-  CreditCard,
-  Receipt,
-  ShoppingCart,
-} from "lucide-react";
-import PaymentMethodPicker from "@/app/components/PaymentMethodPicker";
-import OrderSummaryCard from "@/app/components/OrderSummaryCard";
+import { MapPin, ShoppingCart, Truck } from "lucide-react";
+import { toast } from "sonner";
+
+import { useCart } from "@/components/cart-store";
+import { OrderSummary } from "@/components/order/OrderSummary";
+import { PaymentMethodPicker } from "@/components/order/PaymentMethodPicker";
+import { EmptyState } from "@/components/shared/EmptyState";
+import { PageHeader } from "@/components/shared/PageHeader";
+import { Button } from "@/components/ui/button";
 import { SERVICE_FEE } from "@/lib/constants";
-import BlurText from "@/app/components/reactbits/BlurText/BlurText";
-import StarBorder from "@/app/components/reactbits/StarBorder/StarBorder";
+import { formatIDR, productImage } from "@/lib/format";
+import type { UserData } from "@/lib/types";
 
-/* =======================  TYPES  ======================= */
-interface Product {
-  id: number;
-  name: string;
-  price: number;
-  image_url: string;
-  category: string;
-  stock: number;
-}
-interface CartItem {
-  id: number;
-  product_id: number;
-  quantity: number;
-  products: Product;
-}
-
-/* =======================  HELPERS  ======================= */
-const formatPrice = (p: number) => new Intl.NumberFormat("id-ID").format(p);
-
-/* =======================  CHECKOUT CONTENT  ======================= */
-function CheckoutContent() {
+function CheckoutView() {
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const { data: session, status } = useSession();
+  const params = useSearchParams();
+  const { status } = useSession();
+  const { items, loading, refresh } = useCart();
 
-  const [cartItems, setCartItems] = useState<CartItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [submitting, setSubmitting] = useState(false);
+  const [user, setUser] = useState<UserData | null>(null);
   const [payment, setPayment] = useState("ShopKuPay");
-  const [toast, setToast] = useState<{ message: string; type: string } | null>(
-    null,
-  );
-
-  const userId = session?.user?.id ? Number(session.user.id) : null;
-
-  /* ── Load Cart ── */
-  async function loadCart() {
-    if (!userId) return;
-    const selectedIds = searchParams.get("items");
-    if (!selectedIds) {
-      router.push("/cart");
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const res = await fetch(`/api/cart`);
-      const data = await res.json();
-      const ids = selectedIds.split(",").map((id) => parseInt(id.trim()));
-      const filtered = (data.data || []).filter((item: CartItem) =>
-        ids.includes(item.id),
-      );
-
-      if (filtered.length === 0) {
-        showToast("Item tidak ditemukan", "error");
-        router.push("/cart");
-        return;
-      }
-      setCartItems(filtered);
-    } catch {
-      showToast("Gagal memuat keranjang", "error");
-    } finally {
-      setLoading(false);
-    }
-  }
+  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    if (status === "unauthenticated") {
-      router.push("/login");
-      return;
-    }
-    if (status === "authenticated" && userId) loadCart();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [status, userId, searchParams]);
+    if (status === "unauthenticated") router.replace("/login?callbackUrl=/cart");
+  }, [status, router]);
 
-  /* ── Derived ── */
-  const { subtotal, totalItems } = useMemo(
-    () => ({
-      subtotal: cartItems.reduce(
-        (s, i) => s + i.products.price * i.quantity,
-        0,
-      ),
-      totalItems: cartItems.reduce((s, i) => s + i.quantity, 0),
-    }),
-    [cartItems],
+  useEffect(() => {
+    if (status !== "authenticated") return;
+    const controller = new AbortController();
+    fetch("/api/user", { signal: controller.signal })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => j?.success && setUser(j.data))
+      .catch(() => {});
+    return () => controller.abort();
+  }, [status]);
+
+  // ?items=1,2 memilih baris keranjang tertentu. Tanpa parameter itu, seluruh
+  // keranjang yang di-checkout.
+  const selectedIds = useMemo(() => {
+    const raw = params.get("items");
+    if (!raw) return null;
+    return raw.split(",").map(Number).filter(Number.isInteger);
+  }, [params]);
+
+  const chosen = useMemo(
+    () => (selectedIds ? items.filter((i) => selectedIds.includes(i.id)) : items),
+    [items, selectedIds]
   );
 
-  const showToast = (message: string, type: string) => {
-    setToast({ message, type });
-    setTimeout(() => setToast(null), 3000);
-  };
+  const subtotal = chosen.reduce(
+    (sum, i) => sum + Number(i.products.price) * i.quantity,
+    0
+  );
+  const total = subtotal + SERVICE_FEE;
+  const balance = user ? Number(user.balance) : null;
+  const walletShort = payment === "ShopKuPay" && balance !== null && balance < total;
 
-  /* ── Place Order ── */
-  async function handlePlaceOrder() {
-    if (!cartItems.length || !userId) {
-      router.push("/login");
-      return;
-    }
+  async function submit() {
     setSubmitting(true);
     try {
       const res = await fetch("/api/orders", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          payment_method: payment,
-          items: cartItems.map((item) => ({
-            product_id: item.products.id,
-            quantity: item.quantity,
+          items: chosen.map((i) => ({
+            product_id: i.product_id,
+            quantity: i.quantity,
           })),
+          payment_method: payment,
         }),
       });
-      const data = await res.json();
-      if (!res.ok) {
-        showToast(data.message || "Gagal membuat pesanan", "error");
-        setSubmitting(false);
+      const json = await res.json();
+
+      if (!res.ok || !json.success) {
+        toast.error(json.message ?? "Gagal membuat pesanan");
         return;
       }
 
-      // Bersihkan item yang sudah dibeli dari keranjang. Kalau ada yang
-      // gagal terhapus, tetap beri tahu user daripada diam-diam
-      // meninggalkan item yang sudah dibayar di keranjang.
-      const deleteResults = await Promise.all(
-        cartItems.map((item) =>
-          fetch(`/api/cart?cart_id=${item.id}`, { method: "DELETE" }).then(
-            (r) => r.ok,
-          ),
-        ),
+      // Bersihkan hanya baris yang benar-benar jadi pesanan; barang lain di
+      // keranjang tidak ikut terhapus.
+      await Promise.all(
+        chosen.map((i) =>
+          fetch(`/api/cart?cart_id=${i.id}`, { method: "DELETE" }).catch(() => {})
+        )
       );
-      if (deleteResults.some((ok) => !ok)) {
-        showToast(
-          "Pesanan berhasil dibuat, tapi ada item yang gagal dihapus dari keranjang",
-          "error",
-        );
-        setTimeout(() => router.push("/orders"), 2000);
-        return;
-      }
+      await refresh();
 
-      showToast("Pesanan berhasil dibuat!", "success");
-      setTimeout(() => router.push("/orders"), 1500);
-    } catch {
-      showToast("Terjadi kesalahan", "error");
+      toast.success("Pesanan dibuat");
+      router.push(`/order/${json.data.id}`);
+    } finally {
       setSubmitting(false);
     }
   }
 
-  /* ── States ── */
-  if (loading) {
+  if (loading && items.length === 0) {
     return (
-      <div className="page-container state-screen">
-        <div className="spinner" />
-        <p className="state-text">Memuat data checkout...</p>
+      <div className="shell grid gap-6 py-8 lg:grid-cols-[1fr_380px]">
+        <div className="shimmer h-96 rounded-2xl" />
+        <div className="shimmer h-72 rounded-2xl" />
       </div>
     );
   }
 
-  if (!cartItems.length) {
+  if (chosen.length === 0) {
     return (
-      <div className="page-container state-screen">
-        <div className="state-icon">
-          <ShoppingCart size={34} />
-        </div>
-        <h2 className="state-title">Keranjang Kosong</h2>
-        <p className="state-text">
-          Yuk, mulai belanja dan temukan produk favoritmu!
-        </p>
-        <Link href="/">
-          <button className="btn btn-primary">
-            <ShoppingBag size={15} /> Mulai Belanja
-          </button>
-        </Link>
+      <div className="shell py-16">
+        <EmptyState
+          icon={ShoppingCart}
+          title="Tidak ada barang untuk dibayar"
+          body="Pilih dulu barangnya di keranjang, baru lanjut ke pembayaran."
+          action={<Button render={<Link href="/cart" />}>Ke keranjang</Button>}
+        />
       </div>
     );
   }
 
-  /* ── Main ── */
   return (
-    <div className="page-container">
-      {/* ── Header ── */}
-      <header className="page-header-bar">
-        <div className="page-header-bar-inner">
-          <button
-            onClick={() => router.back()}
-            className="back-btn"
-            aria-label="Kembali"
-          >
-            <ArrowLeft size={18} />
-          </button>
-          <div className="header-text">
-            <h1 className="header-title">Checkout</h1>
-            <p className="header-subtitle">{totalItems} item di keranjang</p>
-          </div>
-          <div className="header-badge">Gratis Ongkir</div>
-        </div>
-      </header>
+    <div className="shell py-6 md:py-8">
+      <PageHeader
+        title="Checkout"
+        subtitle="Periksa pesananmu sebelum membayar"
+        backHref="/cart"
+        backLabel="Kembali ke keranjang"
+      />
 
-      {/* ── Main ── */}
-      <main className="page-main" style={{ paddingBottom: 100 }}>
-        {/* Order Summary */}
-        <div className="card">
-          <div className="section-header">
-            <div className="section-header-icon">
-              <ShoppingBag size={20} />
-            </div>
-            <div>
-              <BlurText text="Ringkasan Pesanan" className="section-header-title" />
-              <p className="section-header-subtitle">{totalItems} produk</p>
-            </div>
-          </div>
-
-          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            {cartItems.map((item, i) => (
-              <div
-                key={item.id}
-                className="item-row"
-                style={{ animationDelay: `${i * 0.06}s` }}
-              >
-                <img
-                  src={
-                    item.products.image_url ||
-                    `https://picsum.photos/seed/${item.product_id}/80/80`
-                  }
-                  alt={item.products.name}
-                  className="item-row-img"
-                  onError={(e) => {
-                    (e.target as HTMLImageElement).src =
-                      `https://picsum.photos/seed/${item.product_id}/80/80`;
-                  }}
-                />
-                <div className="item-row-body">
-                  <p className="item-row-name">{item.products.name}</p>
-                  <p
-                    style={{
-                      fontSize: 11,
-                      color: "var(--gray-500)",
-                      marginBottom: 6,
-                    }}
-                  >
-                    {item.products.category}
-                  </p>
-                  <div className="item-row-bottom">
-                    <span className="item-row-price">
-                      Rp {formatPrice(item.products.price)}
-                    </span>
-                    <span className="item-row-qty">x{item.quantity}</span>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Payment Methods */}
-        <div className="card">
-          <div className="section-header">
-            <div className="section-header-icon">
-              <CreditCard size={20} />
-            </div>
-            <div>
-              <BlurText text="Metode Pembayaran" className="section-header-title" />
-              <p className="section-header-subtitle">
-                Pilih cara bayar yang nyaman
-              </p>
-            </div>
-          </div>
-
-          <PaymentMethodPicker value={payment} onChange={setPayment} />
-        </div>
-
-        {/* Payment Detail */}
-        <div className="card">
-          <div className="section-header">
-            <div className="section-header-icon">
-              <Receipt size={20} />
-            </div>
-            <div>
-              <BlurText text="Rincian Pembayaran" className="section-header-title" />
-              <p className="section-header-subtitle">Detail biaya pesanan</p>
-            </div>
-          </div>
-
-          <OrderSummaryCard itemCount={totalItems} subtotal={subtotal} />
-        </div>
-      </main>
-
-      {/* ── Sticky Footer ── */}
-      <div className="checkout-footer">
-        <div className="checkout-footer-inner">
-          <div className="checkout-footer-total">
-            <p className="checkout-footer-label">Total Pembayaran</p>
-            <p className="checkout-footer-price">
-              Rp {formatPrice(subtotal + SERVICE_FEE)}
-            </p>
-          </div>
-          <StarBorder
-            as="button"
-            style={{ flexShrink: 0 }}
-            innerClassName="btn btn-primary"
-            color="#ffd280"
-            thickness={2}
-            disabled={submitting}
-            onClick={handlePlaceOrder}
-          >
-            <span style={{ padding: "8px 24px", display: "inline-flex", alignItems: "center", gap: 7 }}>
-              {submitting ? (
-                <>
-                  <span className="spinner-sm" /> Memproses...
-                </>
-              ) : (
-                "Bayar Sekarang"
+      <div className="grid items-start gap-6 lg:grid-cols-[1fr_380px]">
+        <div className="space-y-4">
+          <section className="surface p-5">
+            <h2 className="flex items-center gap-2 text-[15px]">
+              <MapPin aria-hidden className="size-4 text-brand-ink" />
+              Alamat pengiriman
+            </h2>
+            <p className="mt-3 text-[14px] font-semibold">
+              {user?.username ?? "—"}
+              {user?.phone && (
+                <span className="ml-2 font-normal text-ink-3">{user.phone}</span>
               )}
-            </span>
-          </StarBorder>
+            </p>
+            <p className="mt-1 text-[13.5px] leading-relaxed text-ink-3">
+              {user?.address || "Alamat belum diisi — lengkapi di halaman profil."}
+            </p>
+            <Button
+              variant="link"
+              size="xs"
+              className="mt-2 px-0"
+              render={<Link href="/profile" />}
+            >
+              Ubah alamat
+            </Button>
+          </section>
+
+          <section className="surface p-5">
+            <h2 className="text-[15px]">Barang yang dibeli</h2>
+            <ul className="mt-4 divide-y divide-line">
+              {chosen.map((item) => (
+                <li key={item.id} className="flex gap-3 py-3 first:pt-0 last:pb-0">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={productImage(item.product_id, item.products.image_url)}
+                    alt=""
+                    width={56}
+                    height={56}
+                    className="size-14 shrink-0 rounded-xl border border-line object-cover"
+                  />
+                  <div className="min-w-0 flex-1">
+                    <p className="clamp-2 text-[13.5px] leading-snug">
+                      {item.products.name}
+                    </p>
+                    <p className="tnum mt-0.5 text-[12.5px] text-ink-3">
+                      {item.quantity} × {formatIDR(Number(item.products.price))}
+                    </p>
+                  </div>
+                  <p className="tnum text-[14px] font-bold">
+                    {formatIDR(Number(item.products.price) * item.quantity)}
+                  </p>
+                </li>
+              ))}
+            </ul>
+
+            <p className="mt-4 flex items-center gap-2 rounded-xl bg-success-soft px-3.5 py-2.5 text-[12.5px] text-ink-2">
+              <Truck aria-hidden className="size-4 shrink-0 text-success" />
+              <span>
+                <b>Reguler</b> — estimasi tiba 2–4 hari, ongkir gratis.
+              </span>
+            </p>
+          </section>
+
+          <section className="surface p-5">
+            <h2 className="text-[15px]">Metode pembayaran</h2>
+            <div className="mt-4">
+              <PaymentMethodPicker
+                value={payment}
+                onChange={setPayment}
+                balance={balance}
+                total={total}
+              />
+            </div>
+          </section>
+        </div>
+
+        <div className="surface p-5 lg:sticky lg:top-24">
+          <h2 className="text-[15px]">Ringkasan transaksi</h2>
+          <div className="mt-4">
+            <OrderSummary itemCount={chosen.length} subtotal={subtotal} />
+          </div>
+
+          <Button
+            size="lg"
+            className="mt-5 w-full"
+            disabled={submitting || walletShort}
+            data-testid="pay-button"
+            onClick={() => void submit()}
+          >
+            {submitting ? "Memproses…" : "Bayar sekarang"}
+          </Button>
+
+          <p className="mt-3 text-center text-[11.5px] leading-relaxed text-ink-3">
+            Ini situs demo. Tidak ada uang sungguhan yang berpindah.
+          </p>
         </div>
       </div>
-
-      {toast && <div className={`toast ${toast.type}`}>{toast.message}</div>}
     </div>
   );
 }
 
-/* =======================  PAGE WITH SUSPENSE  ======================= */
 export default function CheckoutPage() {
   return (
     <Suspense
       fallback={
-        <div className="page-container state-screen">
-          <div className="spinner" />
-          <p className="state-text">Memuat data checkout...</p>
+        <div className="shell grid gap-6 py-8 lg:grid-cols-[1fr_380px]">
+          <div className="shimmer h-96 rounded-2xl" />
+          <div className="shimmer h-72 rounded-2xl" />
         </div>
       }
     >
-      <CheckoutContent />
+      <CheckoutView />
     </Suspense>
   );
 }

@@ -1,300 +1,204 @@
 "use client";
-// app/profile/page.tsx
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
-import {
-  User,
-  ShoppingCart,
-  ClipboardList,
-  Save,
-  RotateCcw,
-} from "lucide-react";
-import ShinyText from "@/app/components/reactbits/ShinyText/ShinyText";
+import { ClipboardList, Wallet } from "lucide-react";
+import { toast } from "sonner";
 
-/* =======================  TYPES  ======================= */
-interface UserData {
-  id: number;
-  username: string;
-  email?: string;
-  phone?: string;
-  address?: string;
-  avatar_url?: string;
-  created_at?: string;
-}
+import { PageHeader } from "@/components/shared/PageHeader";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { formatDate, formatIDR } from "@/lib/format";
+import type { UserData } from "@/lib/types";
 
-/* =======================  HELPERS  ======================= */
-const getInitials = (name: string) =>
-  name
-    .split(" ")
-    .map((w) => w[0])
-    .join("")
-    .toUpperCase()
-    .slice(0, 2);
+const FIELDS = [
+  { key: "username", label: "Username", type: "text", placeholder: "Username kamu" },
+  { key: "email", label: "Email", type: "email", placeholder: "contoh@email.com" },
+  { key: "phone", label: "Nomor telepon", type: "tel", placeholder: "08xxxxxxxxxx" },
+] as const;
 
-const formatDate = (d: string) =>
-  new Date(d).toLocaleDateString("id-ID", {
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  });
-
-/* =======================  PAGE  ======================= */
 export default function ProfilePage() {
   const router = useRouter();
-  const { data: session, status } = useSession();
+  const { status } = useSession();
 
   const [user, setUser] = useState<UserData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [toast, setToast] = useState<{ message: string; type: string } | null>(
-    null,
-  );
-  const [formData, setFormData] = useState({
+  const [form, setForm] = useState({
     username: "",
     email: "",
     phone: "",
     address: "",
   });
+  const [saving, setSaving] = useState(false);
 
-  const userId = session?.user?.id ? Number(session.user.id) : null;
+  useEffect(() => {
+    if (status === "unauthenticated") router.replace("/login?callbackUrl=/profile");
+  }, [status, router]);
 
-  const loadUser = useCallback(async () => {
-    if (!userId) return;
-    setLoading(true);
-    try {
-      const res = await fetch("/api/user");
-      const data = await res.json();
-      if (data.data) {
-        setUser(data.data);
-        setFormData({
-          username: data.data.username || "",
-          email: data.data.email || "",
-          phone: data.data.phone || "",
-          address: data.data.address || "",
+  useEffect(() => {
+    if (status !== "authenticated") return;
+    const controller = new AbortController();
+    fetch("/api/user", { signal: controller.signal })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => {
+        if (!j?.success) return;
+        setUser(j.data);
+        setForm({
+          username: j.data.username ?? "",
+          email: j.data.email ?? "",
+          phone: j.data.phone ?? "",
+          address: j.data.address ?? "",
         });
-      }
-    } catch {
-      showToast("Gagal memuat data profil", "error");
-    } finally {
-      setLoading(false);
-    }
-  }, [userId]);
+      })
+      .catch(() => {});
+    return () => controller.abort();
+  }, [status]);
 
-  const handleChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
-  ) => {
-    const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
-  };
-
-  async function handleSave(e: React.FormEvent) {
+  async function save(e: React.FormEvent) {
     e.preventDefault();
-    if (!userId) {
-      router.push("/login");
-      return;
-    }
     setSaving(true);
     try {
       const res = await fetch("/api/user", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formData),
+        body: JSON.stringify(form),
       });
-      const data = await res.json();
-      if (res.ok) {
-        setUser(data.data);
-        showToast("Profil berhasil diperbarui!", "success");
-      } else {
-        showToast(data.error || "Gagal memperbarui profil", "error");
+      const json = await res.json();
+
+      if (!res.ok || !json.success) {
+        toast.error(json.error ?? "Gagal menyimpan profil");
+        return;
       }
-    } catch {
-      showToast("Terjadi kesalahan", "error");
+
+      setUser(json.data);
+      toast.success("Profil tersimpan");
+      router.refresh();
     } finally {
       setSaving(false);
     }
   }
 
-  const showToast = (message: string, type: string) => {
-    setToast({ message, type });
-    setTimeout(() => setToast(null), 3000);
-  };
-
-  useEffect(() => {
-    if (status === "unauthenticated") {
-      router.push("/login");
-      return;
-    }
-    if (status === "authenticated" && userId) loadUser();
-  }, [status, userId, router, loadUser]);
-
-  /* ── States ── */
-  if (loading) {
-    return (
-      <main className="main-container">
-        <div className="state-screen">
-          <div className="spinner" />
-          <p className="state-text">Memuat profil...</p>
-        </div>
-      </main>
-    );
-  }
-
   if (!user) {
     return (
-      <main className="main-container">
-        <div className="state-screen">
-          <div className="state-icon">
-            <User size={34} />
-          </div>
-          <h3 className="state-title">Pengguna tidak ditemukan</h3>
-          <p className="state-text">Silakan login terlebih dahulu</p>
-          <Link href="/login">
-            <button className="btn btn-primary">Login</button>
-          </Link>
-        </div>
-      </main>
+      <div className="shell grid gap-6 py-8 lg:grid-cols-[300px_1fr]">
+        <div className="shimmer h-64 rounded-2xl" />
+        <div className="shimmer h-96 rounded-2xl" />
+      </div>
     );
   }
 
-  /* ── Main ── */
   return (
-    <main className="main-container">
-      {/* ── Hero ── */}
-      <div className="page-hero">
-        <h1 className="page-title">
-          <ShinyText
-            text="Profil Saya"
-            speed={3}
-            color="rgba(255, 255, 255, 0.85)"
-            shineColor="#ffffff"
-          />
-        </h1>
-        <p className="page-subtitle">
-          Kelola informasi profil untuk mengontrol akunmu
-        </p>
-      </div>
+    <div className="shell py-6 md:py-8">
+      <PageHeader
+        title="Profil saya"
+        subtitle="Alamat di sini yang dipakai saat checkout"
+        backHref="/"
+        backLabel="Kembali"
+      />
 
-      <div className="profile-container">
-        {/* ── Sidebar ── */}
-        <aside className="profile-sidebar">
-          <div className="profile-avatar">
-            {getInitials(user.username || "U")}
+      <div className="grid items-start gap-6 lg:grid-cols-[300px_1fr]">
+        <aside className="space-y-3">
+          <div className="surface flex flex-col items-center p-6 text-center">
+            <span className="grid size-20 place-items-center rounded-full bg-brand-soft text-[28px] font-extrabold text-brand-ink">
+              {user.username.slice(0, 1).toUpperCase()}
+            </span>
+            <p className="mt-4 max-w-full truncate text-[17px] font-bold">
+              {user.username}
+            </p>
+            {user.created_at && (
+              <p className="mt-1 text-[12.5px] text-ink-3">
+                Bergabung {formatDate(user.created_at)}
+              </p>
+            )}
           </div>
-          <h2 className="profile-name">{user.username}</h2>
-          <p className="profile-email">{user.email || "Email belum diatur"}</p>
 
-          <nav className="profile-menu">
-            <button className="profile-menu-item active">
-              <User size={16} /> Profil Saya
-            </button>
-            <Link href="/cart" className="profile-menu-item">
-              <ShoppingCart size={16} /> Keranjang Saya
-            </Link>
-            <Link href="/orders" className="profile-menu-item">
-              <ClipboardList size={16} /> Pesanan Saya
-            </Link>
-          </nav>
+          <div className="surface overflow-hidden">
+            <div className="border-b border-line bg-brand-soft px-5 py-4">
+              <p className="flex items-center gap-2 text-[12.5px] font-semibold text-brand-ink">
+                <Wallet aria-hidden className="size-4" />
+                ShopKu Pay
+              </p>
+              <p
+                data-testid="wallet-balance"
+                className="tnum mt-2 text-[24px] leading-none font-extrabold text-brand-ink"
+              >
+                {formatIDR(Number(user.balance))}
+              </p>
+            </div>
+            <p className="px-5 py-3 text-[11.5px] leading-relaxed text-ink-3">
+              Saldo demo, tidak bisa dicairkan.
+            </p>
+          </div>
+
+          <Button variant="outline" className="w-full" render={<Link href="/orders" />}>
+            <ClipboardList aria-hidden className="size-4" />
+            Pesanan saya
+          </Button>
         </aside>
 
-        {/* ── Form ── */}
-        <div className="profile-content">
-          <h3 className="profile-section-title">Informasi Profil</h3>
+        <form onSubmit={save} className="surface p-5 sm:p-6">
+          <h2 className="text-[16px]">Informasi profil</h2>
+          <p className="mt-1 text-[13px] text-ink-3">
+            Data ini hanya dipakai untuk pengiriman pesanan.
+          </p>
 
-          <form className="profile-form" onSubmit={handleSave}>
-            <div className="form-group">
-              <label className="form-label">Username</label>
-              <input
-                type="text"
-                name="username"
-                className="form-input"
-                value={formData.username}
-                onChange={handleChange}
-                placeholder="Masukkan username"
-              />
-            </div>
-
-            <div className="form-row">
-              <div className="form-group">
-                <label className="form-label">Email</label>
-                <input
-                  type="email"
-                  name="email"
-                  className="form-input"
-                  value={formData.email}
-                  onChange={handleChange}
-                  placeholder="contoh@email.com"
-                />
-              </div>
-              <div className="form-group">
-                <label className="form-label">Nomor Telepon</label>
-                <input
-                  type="tel"
-                  name="phone"
-                  className="form-input"
-                  value={formData.phone}
-                  onChange={handleChange}
-                  placeholder="08xxxxxxxxxx"
-                />
-              </div>
-            </div>
-
-            <div className="form-group">
-              <label className="form-label">Alamat Lengkap</label>
-              <textarea
-                name="address"
-                className="form-input"
-                value={formData.address}
-                onChange={handleChange}
-                placeholder="Masukkan alamat lengkap untuk pengiriman"
-                rows={3}
-                style={{ resize: "vertical" }}
-              />
-            </div>
-
-            {user.created_at && (
-              <div className="form-group">
-                <label className="form-label">Member Sejak</label>
-                <input
-                  type="text"
-                  className="form-input"
-                  value={formatDate(user.created_at)}
-                  disabled
-                />
-              </div>
-            )}
-
-            <div style={{ display: "flex", gap: 12, marginTop: 8 }}>
-              <button
-                type="submit"
-                className="btn btn-primary"
-                disabled={saving}
+          <div className="mt-6 grid gap-4 sm:grid-cols-2">
+            {FIELDS.map((field) => (
+              <div
+                key={field.key}
+                className={field.key === "username" ? "sm:col-span-2" : undefined}
               >
-                {saving ? (
-                  <>
-                    <span className="spinner-sm" /> Menyimpan...
-                  </>
-                ) : (
-                  <>
-                    <Save size={15} /> Simpan Perubahan
-                  </>
-                )}
-              </button>
-              <button
-                type="button"
-                className="btn btn-secondary"
-                onClick={loadUser}
-              >
-                <RotateCcw size={15} /> Reset
-              </button>
-            </div>
-          </form>
-        </div>
+                <Label htmlFor={field.key}>{field.label}</Label>
+                <Input
+                  id={field.key}
+                  type={field.type}
+                  placeholder={field.placeholder}
+                  value={form[field.key]}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, [field.key]: e.target.value }))
+                  }
+                  className="mt-1.5 h-11"
+                />
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-4">
+            <Label htmlFor="address">Alamat lengkap</Label>
+            <Textarea
+              id="address"
+              rows={3}
+              placeholder="Jalan, nomor rumah, kelurahan, kota, kode pos"
+              value={form.address}
+              onChange={(e) => setForm((f) => ({ ...f, address: e.target.value }))}
+              className="mt-1.5"
+            />
+          </div>
+
+          <div className="mt-6 flex justify-end gap-2 border-t border-line pt-5">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() =>
+                setForm({
+                  username: user.username ?? "",
+                  email: user.email ?? "",
+                  phone: user.phone ?? "",
+                  address: user.address ?? "",
+                })
+              }
+            >
+              Batalkan perubahan
+            </Button>
+            <Button type="submit" disabled={saving} data-testid="save-profile">
+              {saving ? "Menyimpan…" : "Simpan"}
+            </Button>
+          </div>
+        </form>
       </div>
-
-      {toast && <div className={`toast ${toast.type}`}>{toast.message}</div>}
-    </main>
+    </div>
   );
 }

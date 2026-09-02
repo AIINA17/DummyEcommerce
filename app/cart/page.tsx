@@ -1,337 +1,255 @@
 "use client";
-// app/cart/page.tsx
 
-import { useCallback, useEffect, useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
-import {
-  ArrowLeft,
-  ShoppingCart,
-  ShoppingBag,
-  Trash2,
-  Minus,
-  Plus,
-  CheckCheck,
-} from "lucide-react";
-import StarBorder from "@/app/components/reactbits/StarBorder/StarBorder";
+import { Minus, Plus, ShoppingCart, Trash2 } from "lucide-react";
 
-/* =======================  TYPES  ======================= */
-interface Product {
-  id: number;
-  name: string;
-  description: string;
-  price: number;
-  category: string;
-  rating: number;
-  stock: number;
-  image_url: string;
-}
-interface CartItem {
-  id: number;
-  user_id: number;
-  product_id: number;
-  quantity: number;
-  products: Product;
-  selected?: boolean;
-}
+import { useCart } from "@/components/cart-store";
+import { EmptyState } from "@/components/shared/EmptyState";
+import { PageHeader } from "@/components/shared/PageHeader";
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { SERVICE_FEE } from "@/lib/constants";
+import { formatIDR, productImage } from "@/lib/format";
 
-/* =======================  HELPERS  ======================= */
-const formatPrice = (price: number) =>
-  new Intl.NumberFormat("id-ID", {
-    style: "currency",
-    currency: "IDR",
-    minimumFractionDigits: 0,
-  }).format(price);
-
-/* =======================  SUB-COMPONENTS  ======================= */
-function LoadingState() {
-  return (
-    <div className="page-container state-screen">
-      <div className="spinner" />
-      <p className="state-text">Memuat keranjang...</p>
-    </div>
-  );
-}
-
-function EmptyCartState() {
-  return (
-    <div className="page-container state-screen">
-      <div className="state-icon">
-        <ShoppingCart size={34} />
-      </div>
-      <h2 className="state-title">Keranjang Kosong</h2>
-      <p className="state-text">
-        Yuk, mulai belanja dan temukan produk favoritmu!
-      </p>
-      <Link href="/">
-        <button className="btn btn-primary">
-          <ShoppingBag size={15} /> Mulai Belanja
-        </button>
-      </Link>
-    </div>
-  );
-}
-
-/* =======================  MAIN PAGE  ======================= */
 export default function CartPage() {
   const router = useRouter();
-  const { data: session, status } = useSession();
-  const [cartItems, setCartItems] = useState<CartItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [toast, setToast] = useState<{ message: string; type: string } | null>(
-    null,
+  const { status } = useSession();
+  const { items, loading, setQuantity, remove } = useCart();
+
+  // Yang disimpan adalah id yang SENGAJA dilepas centangnya, bukan yang
+  // tercentang. Dengan begitu barang baru otomatis ikut terpilih dan barang
+  // yang dihapus hilang sendiri dari perhitungan — tanpa effect yang menyalin
+  // isi keranjang ke dalam state seleksi.
+  const [unchecked, setUnchecked] = useState<number[]>([]);
+
+  const chosen = useMemo(
+    () => items.filter((i) => !unchecked.includes(i.id)),
+    [items, unchecked]
   );
-  const userId = session?.user?.id ? Number(session.user.id) : null;
 
-  /* ── Data ── */
-  const loadCart = useCallback(async () => {
-    if (!userId) return;
-    setLoading(true);
-    try {
-      const res = await fetch("/api/cart");
-      const data = await res.json();
-      setCartItems(
-        (data.data || []).map((item: CartItem) => ({
-          ...item,
-          selected: true,
-        })),
-      );
-    } catch {
-      console.error("Error loading cart");
-    } finally {
-      setLoading(false);
-    }
-  }, [userId]);
+  const subtotal = chosen.reduce(
+    (sum, i) => sum + Number(i.products.price) * i.quantity,
+    0
+  );
+  const total = chosen.length ? subtotal + SERVICE_FEE : 0;
 
-  async function updateQuantity(cartId: number, newQty: number) {
-    try {
-      const res = await fetch("/api/cart", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ cart_id: cartId, quantity: newQty }),
-      });
-      if (!res.ok) return;
-      if (newQty <= 0) {
-        setCartItems((prev) => prev.filter((i) => i.id !== cartId));
-        showToast("Produk dihapus dari keranjang", "success");
-      } else {
-        setCartItems((prev) =>
-          prev.map((i) => (i.id === cartId ? { ...i, quantity: newQty } : i)),
-        );
-      }
-    } catch {
-      showToast("Gagal mengupdate keranjang", "error");
-    }
-  }
-
-  async function deleteItem(cartId: number) {
-    try {
-      const res = await fetch(`/api/cart?cart_id=${cartId}`, {
-        method: "DELETE",
-      });
-      if (res.ok) {
-        setCartItems((prev) => prev.filter((i) => i.id !== cartId));
-        showToast("Produk dihapus dari keranjang", "success");
-      }
-    } catch {
-      showToast("Gagal menghapus produk", "error");
-    }
-  }
-
-  const toggleSelect = (id: number) =>
-    setCartItems((prev) =>
-      prev.map((i) => (i.id === id ? { ...i, selected: !i.selected } : i)),
+  if (status === "unauthenticated") {
+    return (
+      <div className="shell py-16">
+        <EmptyState
+          icon={ShoppingCart}
+          title="Masuk dulu untuk lihat keranjang"
+          body="Keranjang tersimpan di akunmu, jadi bisa dibuka dari perangkat mana saja."
+          action={
+            <Button render={<Link href="/login?callbackUrl=/cart" />}>Masuk</Button>
+          }
+        />
+      </div>
     );
-  const toggleSelectAll = () => {
-    const all = cartItems.every((i) => i.selected);
-    setCartItems((prev) => prev.map((i) => ({ ...i, selected: !all })));
-  };
-  const showToast = (message: string, type: string) => {
-    setToast({ message, type });
-    setTimeout(() => setToast(null), 3000);
-  };
-  const handleCheckout = () => {
-    if (selectedItems.length === 0) {
-      showToast("Pilih produk yang ingin di-checkout", "error");
-      return;
-    }
-    router.push(`/checkout?items=${selectedItems.map((i) => i.id).join(",")}`);
-  };
+  }
 
-  useEffect(() => {
-    if (status === "unauthenticated") {
-      router.push("/login");
-      return;
-    }
-    if (status === "authenticated" && userId) loadCart();
-  }, [status, userId, router, loadCart]);
-
-  /* ── Derived ── */
-  const selectedItems = cartItems.filter((i) => i.selected);
-  const totalItems = selectedItems.reduce((s, i) => s + i.quantity, 0);
-  const subtotal = selectedItems.reduce(
-    (s, i) => s + i.products.price * i.quantity,
-    0,
-  );
-  const allSelected =
-    cartItems.length > 0 && cartItems.every((i) => i.selected);
-
-  /* ── Render ── */
-  if (loading) return <LoadingState />;
-  if (cartItems.length === 0) return <EmptyCartState />;
-
-  return (
-    <div className="page-container">
-      {/* ── Header ── */}
-      <header className="page-header-bar">
-        <div className="page-header-bar-inner">
-          <button
-            onClick={() => router.push("/")}
-            className="back-btn"
-            aria-label="Kembali"
-          >
-            <ArrowLeft size={18} />
-          </button>
-          <div className="header-text">
-            <h1 className="header-title">Keranjang Belanja</h1>
-            <p className="header-subtitle">
-              {cartItems.length} produk di keranjang kamu
-            </p>
-          </div>
-        </div>
-      </header>
-
-      {/* ── Main ── */}
-      <main
-        className="page-main"
-        style={{
-          maxWidth: 960,
-          flexDirection: "row",
-          alignItems: "flex-start",
-          flexWrap: "wrap",
-        }}
-      >
-        {/* Items */}
-        <div className="cart-items" style={{ flex: "1 1 480px" }}>
-          <div className="cart-header">
-            <label className="cart-select-all">
-              <input
-                type="checkbox"
-                className="checkbox-custom"
-                checked={allSelected}
-                onChange={toggleSelectAll}
-              />
-              <span>Pilih Semua ({cartItems.length})</span>
-            </label>
-          </div>
-
-          {cartItems.map((item) => (
-            <div key={item.id} className="cart-item">
-              <div className="cart-item-checkbox">
-                <input
-                  type="checkbox"
-                  className="checkbox-custom"
-                  checked={item.selected ?? false}
-                  onChange={() => toggleSelect(item.id)}
-                />
-              </div>
-              <img
-                src={
-                  item.products.image_url ||
-                  `https://picsum.photos/seed/${item.product_id}/100/100`
-                }
-                alt={item.products.name}
-                className="cart-item-image"
-                onError={(e) => {
-                  (e.target as HTMLImageElement).src =
-                    `https://picsum.photos/seed/${item.product_id}/100/100`;
-                }}
-              />
-              <div className="cart-item-details">
-                <h3 className="cart-item-name">{item.products.name}</h3>
-                <p className="cart-item-category">{item.products.category}</p>
-                <p className="cart-item-price">
-                  {formatPrice(item.products.price)}
-                </p>
-              </div>
-              <div className="cart-item-actions">
-                <button
-                  className="cart-item-delete"
-                  onClick={() => deleteItem(item.id)}
-                  aria-label="Hapus"
-                >
-                  <Trash2 size={17} />
-                </button>
-                <div className="qty-control">
-                  <button
-                    className="qty-btn"
-                    onClick={() => updateQuantity(item.id, item.quantity - 1)}
-                    disabled={item.quantity <= 1}
-                    aria-label="Kurangi"
-                  >
-                    <Minus size={13} />
-                  </button>
-                  <input
-                    type="text"
-                    className="qty-input"
-                    value={item.quantity}
-                    readOnly
-                  />
-                  <button
-                    className="qty-btn"
-                    onClick={() => updateQuantity(item.id, item.quantity + 1)}
-                    disabled={item.quantity >= item.products.stock}
-                    aria-label="Tambah"
-                  >
-                    <Plus size={13} />
-                  </button>
-                </div>
-              </div>
-            </div>
+  if (loading && items.length === 0) {
+    return (
+      <div className="shell grid gap-6 py-8 lg:grid-cols-[1fr_360px]">
+        <div className="space-y-3">
+          {Array.from({ length: 3 }, (_, i) => (
+            <div key={i} className="shimmer h-28 rounded-2xl" />
           ))}
         </div>
+        <div className="shimmer h-64 rounded-2xl" />
+      </div>
+    );
+  }
 
-        {/* Summary */}
-        <div className="cart-summary" style={{ flex: "0 0 300px" }}>
-          <h3 className="cart-summary-title">Ringkasan Belanja</h3>
-          <div className="cart-summary-row">
-            <span className="cart-summary-label">Total Produk</span>
-            <span className="cart-summary-value">{totalItems} barang</span>
-          </div>
-          <div className="cart-summary-row">
-            <span className="cart-summary-label">Produk Dipilih</span>
-            <span className="cart-summary-value">
-              {selectedItems.length} produk
+  if (items.length === 0) {
+    return (
+      <div className="shell py-16">
+        <EmptyState
+          icon={ShoppingCart}
+          title="Keranjang kamu masih kosong"
+          body="Yuk isi dengan barang yang kamu incar. Cek dulu produk yang lagi ramai dibeli."
+          action={<Button render={<Link href="/" />}>Mulai belanja</Button>}
+        />
+      </div>
+    );
+  }
+
+  const allChecked = chosen.length === items.length;
+
+  return (
+    <div className="shell py-6 md:py-8">
+      <PageHeader
+        title="Keranjang"
+        subtitle={`${items.length} barang tersimpan`}
+        backHref="/"
+        backLabel="Lanjut belanja"
+      />
+
+      <div className="grid items-start gap-6 lg:grid-cols-[1fr_360px]">
+        <div className="space-y-3">
+          <div className="surface flex items-center gap-3 px-4 py-3.5">
+            <Checkbox
+              id="pilih-semua"
+              checked={allChecked}
+              onCheckedChange={(checked) =>
+                setUnchecked(checked ? [] : items.map((i) => i.id))
+              }
+            />
+            <label htmlFor="pilih-semua" className="text-[14px] font-semibold">
+              Pilih semua
+            </label>
+            <span className="tnum ml-auto text-[13px] text-ink-3">
+              {chosen.length}/{items.length} dipilih
             </span>
           </div>
-          <div className="cart-summary-row total">
-            <span className="cart-summary-label">Total Harga</span>
-            <span className="cart-summary-value">{formatPrice(subtotal)}</span>
-          </div>
-          <StarBorder
-            as="button"
-            className="btn-full"
-            style={{ marginTop: 18, width: "100%" }}
-            innerClassName="btn btn-primary"
-            color="#ffd280"
-            thickness={2}
-            onClick={handleCheckout}
-            disabled={selectedItems.length === 0}
-          >
-            <span style={{ padding: "5px 0", display: "inline-flex", alignItems: "center", gap: 7 }}>
-              <CheckCheck size={15} /> Checkout ({selectedItems.length})
-            </span>
-          </StarBorder>
-          <Link href="/" style={{ display: "block", marginTop: 8 }}>
-            <button className="btn btn-secondary btn-full">
-              Lanjut Belanja
-            </button>
-          </Link>
+
+          <ul className="stagger space-y-3">
+            {items.map((item) => {
+              const price = Number(item.products.price);
+              const checked = !unchecked.includes(item.id);
+
+              return (
+                <li
+                  key={item.id}
+                  data-testid="cart-item"
+                  className="surface flex gap-3 p-4 sm:gap-4"
+                >
+                  <Checkbox
+                    className="mt-1 shrink-0"
+                    checked={checked}
+                    aria-label={`Pilih ${item.products.name}`}
+                    onCheckedChange={(next) =>
+                      setUnchecked((prev) =>
+                        next
+                          ? prev.filter((id) => id !== item.id)
+                          : [...prev, item.id]
+                      )
+                    }
+                  />
+
+                  <Link
+                    href={`/product/${item.product_id}`}
+                    className="shrink-0 overflow-hidden rounded-xl border border-line"
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={productImage(item.product_id, item.products.image_url)}
+                      alt={item.products.name}
+                      width={88}
+                      height={88}
+                      className="size-18 object-cover sm:size-22"
+                    />
+                  </Link>
+
+                  <div className="flex min-w-0 flex-1 flex-col">
+                    <Link
+                      href={`/product/${item.product_id}`}
+                      className="clamp-2 text-[14px] leading-snug font-medium transition-colors duration-160 hover:text-brand-ink"
+                    >
+                      {item.products.name}
+                    </Link>
+                    <p className="tnum mt-1 text-[12.5px] text-ink-3">
+                      {formatIDR(price)} / barang
+                    </p>
+
+                    <div className="mt-auto flex flex-wrap items-center justify-between gap-3 pt-3">
+                      <div className="flex h-9 items-center rounded-md border border-line">
+                        <button
+                          type="button"
+                          aria-label="Kurangi"
+                          onClick={() => void setQuantity(item.id, item.quantity - 1)}
+                          className="grid size-9 place-items-center rounded-l-md text-brand-ink transition-colors duration-160 hover:bg-brand-soft"
+                        >
+                          <Minus aria-hidden className="size-3.5" />
+                        </button>
+                        <span
+                          aria-live="polite"
+                          className="tnum grid h-full w-10 place-items-center border-x border-line text-[13px] font-bold"
+                        >
+                          {item.quantity}
+                        </span>
+                        <button
+                          type="button"
+                          aria-label="Tambah"
+                          disabled={item.quantity >= item.products.stock}
+                          onClick={() => void setQuantity(item.id, item.quantity + 1)}
+                          className="grid size-9 place-items-center rounded-r-md text-brand-ink transition-colors duration-160 hover:bg-brand-soft disabled:text-ink-3/40 disabled:hover:bg-transparent"
+                        >
+                          <Plus aria-hidden className="size-3.5" />
+                        </button>
+                      </div>
+
+                      <p className="tnum text-[16px] font-extrabold">
+                        {formatIDR(price * item.quantity)}
+                      </p>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    aria-label={`Hapus ${item.products.name}`}
+                    onClick={() => void remove(item.id)}
+                    className="grid size-9 shrink-0 place-items-center self-start rounded-md text-ink-3 transition-colors duration-160 hover:bg-destructive/10 hover:text-destructive focus-visible:ring-[3px] focus-visible:ring-destructive/25 focus-visible:outline-none"
+                  >
+                    <Trash2 aria-hidden className="size-4" />
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
         </div>
-      </main>
 
-      {toast && <div className={`toast ${toast.type}`}>{toast.message}</div>}
+        <div className="surface p-5 lg:sticky lg:top-24">
+          <h2 className="text-[16px]">Ringkasan belanja</h2>
+
+          <dl className="mt-4 space-y-2.5 text-[13.5px]">
+            <Row label={`Subtotal (${chosen.length} barang)`} value={subtotal} />
+            <Row label="Ongkos kirim" free />
+            <Row label="Biaya layanan" value={chosen.length ? SERVICE_FEE : 0} />
+          </dl>
+
+          <div className="mt-4 flex items-baseline justify-between border-t border-line pt-4">
+            <span className="text-[14px] font-semibold">Total</span>
+            <span data-testid="cart-total" className="tnum text-[20px] font-extrabold">
+              {formatIDR(total)}
+            </span>
+          </div>
+
+          <Button
+            size="lg"
+            className="mt-5 w-full"
+            disabled={chosen.length === 0}
+            data-testid="checkout-button"
+            onClick={() =>
+              router.push(`/checkout?items=${chosen.map((i) => i.id).join(",")}`)
+            }
+          >
+            Checkout ({chosen.length})
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Row({
+  label,
+  value,
+  free,
+}: {
+  label: string;
+  value?: number;
+  free?: boolean;
+}) {
+  return (
+    <div className="flex justify-between gap-4">
+      <dt className="text-ink-3">{label}</dt>
+      <dd className={free ? "font-semibold text-success" : "tnum font-semibold"}>
+        {free ? "Gratis" : formatIDR(value ?? 0)}
+      </dd>
     </div>
   );
 }

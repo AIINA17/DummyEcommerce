@@ -1,574 +1,297 @@
 "use client";
-// app/product/[id]/page.tsx
 
-import { useParams, useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { use, useEffect, useState, useTransition } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import {
-  ArrowLeft,
-  ShoppingCart,
-  Zap,
-  Star,
-  CheckCircle2,
-  AlertTriangle,
-  XCircle,
-  PackageOpen,
+  ChevronRight,
   Minus,
+  PackageX,
   Plus,
+  RotateCcw,
+  ShieldCheck,
+  ShoppingCart,
+  Truck,
 } from "lucide-react";
-import BlurText from "@/app/components/reactbits/BlurText/BlurText";
-import TiltedCard from "@/app/components/reactbits/TiltedCard/TiltedCard";
-import ClickSpark from "@/app/components/reactbits/ClickSpark/ClickSpark";
-import StarBorder from "@/app/components/reactbits/StarBorder/StarBorder";
+import { toast } from "sonner";
 
-/* =======================  TYPES  ======================= */
-interface Product {
-  id: number;
-  name: string;
-  description: string | null;
-  price: number;
-  category: string;
-  rating: number;
-  stock: number;
-  image_url: string | null;
-}
+import { useCart } from "@/components/cart-store";
+import { ProductCard } from "@/components/product/ProductCard";
+import { EmptyState } from "@/components/shared/EmptyState";
+import { Rating } from "@/components/shared/Rating";
+import { Button } from "@/components/ui/button";
+import { Separator } from "@/components/ui/separator";
+import { formatIDR, productImage } from "@/lib/format";
+import type { Product } from "@/lib/types";
 
-/* =======================  HELPERS  ======================= */
-const formatPrice = (price: number) =>
-  new Intl.NumberFormat("id-ID", {
-    style: "currency",
-    currency: "IDR",
-    minimumFractionDigits: 0,
-  }).format(price);
+const GUARANTEES = [
+  { Icon: ShieldCheck, label: "Garansi resmi 1 tahun" },
+  { Icon: Truck, label: "Gratis ongkir ke seluruh Indonesia" },
+  { Icon: RotateCcw, label: "Bisa dikembalikan dalam 7 hari" },
+];
 
-type StockInfo = { label: string; cls: string; icon: React.ReactNode };
-const getStockInfo = (stock: number): StockInfo => {
-  if (stock === 0)
-    return {
-      label: "Habis",
-      cls: "status-badge--error",
-      icon: <XCircle size={12} />,
-    };
-  if (stock < 10)
-    return {
-      label: "Terbatas",
-      cls: "status-badge--warning",
-      icon: <AlertTriangle size={12} />,
-    };
-  return {
-    label: "Tersedia",
-    cls: "status-badge--success",
-    icon: <CheckCircle2 size={12} />,
-  };
-};
-
-const shuffleArray = <T,>(arr: T[]): T[] => {
-  const a = [...arr];
-  for (let i = a.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [a[i], a[j]] = [a[j], a[i]];
-  }
-  return a;
-};
-
-/* =======================  MAIN PAGE  ======================= */
-export default function ProductDetail() {
-  const { id } = useParams();
+export default function ProductPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const { id } = use(params);
   const router = useRouter();
-  const { data: session, status } = useSession();
-  const userId = session?.user?.id ? Number(session.user.id) : null;
+  const { status } = useSession();
+  const { add } = useCart();
 
   const [product, setProduct] = useState<Product | null>(null);
   const [related, setRelated] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
-  const [quantity, setQuantity] = useState(1);
-  const [toast, setToast] = useState<{
-    message: string;
-    type: "success" | "error";
-  } | null>(null);
-
-  /* ── Data ── */
-  const loadProduct = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await fetch(`/api/products/${id}`);
-      const json = await res.json();
-      if (!json.success) {
-        setProduct(null);
-        return;
-      }
-
-      const cur = json.data;
-      setProduct(cur);
-
-      const resAll = await fetch(`/api/products?category=${cur.category}`);
-      const all = await resAll.json();
-      let filtered: Product[] = [];
-
-      if (all.success && Array.isArray(all.data)) {
-        filtered = all.data.filter((p: Product) => p.id !== cur.id);
-        if (filtered.length === 0) {
-          const fb = await (await fetch("/api/products")).json();
-          filtered = fb.data.filter((p: Product) => p.id !== cur.id);
-        }
-      }
-      setRelated(shuffleArray(filtered).slice(0, 4));
-    } catch (err) {
-      console.error(err);
-      setProduct(null);
-    } finally {
-      setLoading(false);
-    }
-  }, [id]);
-
-  const addToCart = async () => {
-    if (!userId || status !== "authenticated") {
-      showToast("Silakan login terlebih dahulu", "error");
-      setTimeout(() => router.push("/login"), 1500);
-      return;
-    }
-    try {
-      const res = await fetch("/api/cart", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          product_id: product?.id,
-          quantity,
-        }),
-      });
-      showToast(
-        res.ok
-          ? `${quantity} item berhasil ditambahkan ke keranjang!`
-          : "Gagal menambahkan ke keranjang",
-        res.ok ? "success" : "error",
-      );
-    } catch {
-      showToast("Terjadi kesalahan", "error");
-    }
-  };
-
-  const buyNow = () => {
-    if (!userId || status !== "authenticated") {
-      showToast("Silakan login terlebih dahulu", "error");
-      setTimeout(() => router.push("/login"), 1500);
-      return;
-    }
-    router.push(`/checkout/${product?.id}?qty=${quantity}`);
-  };
-
-  const showToast = (message: string, type: "success" | "error") => {
-    setToast({ message, type });
-    setTimeout(() => setToast(null), 3000);
-  };
+  const [qty, setQty] = useState(1);
+  const [broken, setBroken] = useState(false);
+  const [pending, startTransition] = useTransition();
 
   useEffect(() => {
-    if (id) {
-      loadProduct();
-      window.scrollTo({ top: 0, behavior: "smooth" });
-    }
-  }, [id, loadProduct]);
+    const controller = new AbortController();
 
-  /* ── Loading / Not Found ── */
+    fetch(`/api/products/${id}`, { signal: controller.signal })
+      .then((r) => (r.ok ? r.json() : null))
+      .then(async (json) => {
+        if (!json?.success) {
+          setProduct(null);
+          return;
+        }
+        const current: Product = json.data;
+        setProduct(current);
+
+        const res = await fetch(
+          `/api/products?category=${encodeURIComponent(current.category)}`,
+          { signal: controller.signal }
+        );
+        const all = await res.json();
+        setRelated(
+          (all.data ?? [])
+            .filter((p: Product) => p.id !== current.id)
+            .slice(0, 4)
+        );
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+
+    return () => controller.abort();
+  }, [id]);
+
+  function requireLogin(): boolean {
+    if (status === "authenticated") return false;
+    toast.info("Masuk dulu untuk mulai belanja");
+    router.push(`/login?callbackUrl=/product/${id}`);
+    return true;
+  }
+
+  async function addToCart(): Promise<boolean> {
+    if (requireLogin()) return false;
+    const ok = await add(Number(id), qty);
+    if (ok) toast.success("Masuk keranjang");
+    else toast.error("Gagal menambahkan ke keranjang");
+    return ok;
+  }
+
   if (loading) {
     return (
-      <div className="page-container state-screen">
-        <div className="spinner" />
-        <p className="state-text">Memuat detail produk...</p>
+      <div className="shell grid gap-8 py-8 lg:grid-cols-[minmax(0,480px)_1fr]">
+        <div className="shimmer aspect-square rounded-2xl" />
+        <div className="space-y-4">
+          <div className="shimmer h-8 w-3/4 rounded" />
+          <div className="shimmer h-10 w-1/3 rounded" />
+          <div className="shimmer h-40 w-full rounded-2xl" />
+        </div>
       </div>
     );
   }
 
   if (!product) {
     return (
-      <div className="page-container state-screen">
-        <div className="state-icon">
-          <PackageOpen size={34} />
-        </div>
-        <h2 className="state-title">Produk Tidak Ditemukan</h2>
-        <p className="state-text">
-          Maaf, produk yang kamu cari tidak tersedia.
-        </p>
-        <Link href="/">
-          <button className="btn btn-primary">Kembali ke Beranda</button>
-        </Link>
+      <div className="shell py-16">
+        <EmptyState
+          icon={PackageX}
+          title="Produk tidak ditemukan"
+          body="Mungkin produknya sudah dihapus penjual, atau alamatnya salah ketik."
+          action={<Button render={<Link href="/" />}>Kembali ke beranda</Button>}
+        />
       </div>
     );
   }
 
-  const stockInfo = getStockInfo(product.stock);
+  const soldOut = product.stock <= 0;
+  const subtotal = product.price * qty;
 
   return (
-    <div className="page-container">
-      {/* ── Header ── */}
-      <header className="page-header-bar">
-        <div className="page-header-bar-inner" style={{ maxWidth: 1100 }}>
-          <button
-            onClick={() => router.back()}
-            className="back-btn"
-            aria-label="Kembali"
-          >
-            <ArrowLeft size={18} />
-          </button>
-          <div className="header-text">
-            <h1 className="header-title">Detail Produk</h1>
-            <p className="header-subtitle">{product.category}</p>
+    <div className="shell py-6 md:py-8">
+      <nav aria-label="Breadcrumb" className="mb-5">
+        <ol className="flex flex-wrap items-center gap-1 text-[13px] text-ink-3">
+          <li>
+            <Link href="/" className="transition-colors duration-160 hover:text-brand-ink">
+              Beranda
+            </Link>
+          </li>
+          <ChevronRight aria-hidden className="size-3.5" />
+          <li>
+            <Link
+              href={`/?category=${encodeURIComponent(product.category)}`}
+              className="transition-colors duration-160 hover:text-brand-ink"
+            >
+              {product.category}
+            </Link>
+          </li>
+          <ChevronRight aria-hidden className="size-3.5" />
+          <li aria-current="page" className="truncate text-ink">
+            {product.name}
+          </li>
+        </ol>
+      </nav>
+
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,460px)_1fr] lg:gap-10">
+        <div className="lg:sticky lg:top-24 lg:h-fit">
+          <div className="surface overflow-hidden">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={broken ? productImage(product.id) : productImage(product.id, product.image_url)}
+              alt={product.name}
+              width={800}
+              height={800}
+              onError={() => setBroken(true)}
+              className="aspect-square w-full object-cover"
+            />
           </div>
         </div>
-      </header>
 
-      {/* ── Content ── */}
-      <main
-        style={{ maxWidth: 1100, margin: "0 auto", padding: "28px 24px 80px" }}
-      >
-        {/* Product Card */}
-        <article
-          className="card"
-          style={{
-            display: "grid",
-            gridTemplateColumns: "1fr 1fr",
-            padding: 0,
-            overflow: "hidden",
-            marginBottom: 40,
-          }}
-        >
-          {/* Image */}
-          <div
-            style={{
-              position: "relative",
-              background: "var(--gray-100)",
-              overflow: "hidden",
-            }}
-          >
-            <img
-              src={
-                product.image_url ||
-                `https://picsum.photos/seed/${product.id}/800/800`
-              }
-              alt={product.name}
-              style={{
-                width: "100%",
-                aspectRatio: "1",
-                objectFit: "cover",
-                display: "block",
-                transition: "transform .4s ease",
-              }}
-              onMouseEnter={(e) =>
-                (e.currentTarget.style.transform = "scale(1.04)")
-              }
-              onMouseLeave={(e) =>
-                (e.currentTarget.style.transform = "scale(1)")
-              }
-            />
-            <div
-              style={{
-                position: "absolute",
-                top: 16,
-                right: 16,
-                background: "rgba(255,255,255,.96)",
-                backdropFilter: "blur(8px)",
-                padding: "8px 16px",
-                borderRadius: "var(--radius-pill)",
-                display: "flex",
-                alignItems: "center",
-                gap: 6,
-                boxShadow: "var(--shadow-md)",
-                fontWeight: 700,
-                fontSize: 14,
-              }}
-            >
-              <Star size={14} fill="var(--warning)" color="var(--warning)" />
-              {product.rating.toFixed(1)}
-            </div>
+        <div>
+          <p className="micro">{product.category}</p>
+
+          <h1 className="mt-2.5 text-[26px] leading-tight sm:text-[32px]">
+            {product.name}
+          </h1>
+
+          <div className="mt-3 flex flex-wrap items-center gap-3 text-[13px] text-ink-3">
+            <Rating value={product.rating} className="text-ink-2" />
+            <span aria-hidden>·</span>
+            <span className="tnum">Stok {product.stock}</span>
           </div>
 
-          {/* Info */}
-          <div
-            style={{
-              padding: 36,
-              display: "flex",
-              flexDirection: "column",
-              gap: 24,
-            }}
+          <p
+            data-testid="product-price"
+            className="tnum mt-5 text-[34px] leading-none font-extrabold text-brand"
           >
-            {/* Title */}
-            <div
-              style={{
-                paddingBottom: 20,
-                borderBottom: "1px solid var(--gray-200)",
-              }}
-            >
-              <h2
-                style={{
-                  fontSize: 24,
-                  fontWeight: 800,
-                  color: "var(--gray-900)",
-                  lineHeight: 1.25,
-                  marginBottom: 12,
-                }}
-              >
-                {product.name}
-              </h2>
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 8,
-                  flexWrap: "wrap",
-                }}
-              >
-                <span className={`status-badge ${stockInfo.cls}`}>
-                  {stockInfo.icon} {stockInfo.label}
-                </span>
-                <span style={{ fontSize: 12, color: "var(--gray-500)" }}>
-                  {product.stock} unit tersedia
-                </span>
-              </div>
-            </div>
+            {formatIDR(product.price)}
+          </p>
 
-            {/* Price */}
-            <div>
-              <p
-                style={{
-                  fontSize: 11,
-                  fontWeight: 700,
-                  color: "var(--gray-500)",
-                  textTransform: "uppercase",
-                  letterSpacing: ".08em",
-                  marginBottom: 6,
-                }}
-              >
-                Harga Produk
-              </p>
-              <p
-                style={{
-                  fontSize: 30,
-                  fontWeight: 900,
-                  color: "var(--primary)",
-                  letterSpacing: "-.03em",
-                }}
-              >
-                {formatPrice(product.price)}
-              </p>
-            </div>
+          <Separator className="my-6" />
 
-            {/* Description */}
-            <div
-              style={{
-                background: "var(--gray-50)",
-                borderRadius: "var(--radius-lg)",
-                padding: "16px 18px",
-                border: "1px solid var(--gray-200)",
-              }}
-            >
-              <p
-                style={{
-                  fontSize: 11,
-                  fontWeight: 700,
-                  color: "var(--gray-500)",
-                  textTransform: "uppercase",
-                  letterSpacing: ".08em",
-                  marginBottom: 8,
-                }}
-              >
-                Deskripsi
-              </p>
-              <p
-                style={{
-                  fontSize: 14,
-                  lineHeight: 1.7,
-                  color: "var(--gray-600)",
-                }}
-              >
-                {product.description || "Belum ada deskripsi untuk produk ini."}
-              </p>
-            </div>
-
-            {/* Quantity */}
-            <div>
-              <p
-                style={{
-                  fontSize: 13,
-                  fontWeight: 700,
-                  color: "var(--gray-700)",
-                  marginBottom: 10,
-                }}
-              >
-                Jumlah Pembelian
-              </p>
-              <div className="qty-control">
-                <button
-                  className="qty-btn"
-                  onClick={() => setQuantity(Math.max(1, quantity - 1))}
-                  disabled={quantity <= 1}
-                  aria-label="Kurangi"
-                >
-                  <Minus size={14} />
-                </button>
-                <input
-                  type="text"
-                  className="qty-input"
-                  value={quantity}
-                  readOnly
-                  style={{ width: 60 }}
-                />
-                <button
-                  className="qty-btn"
-                  onClick={() =>
-                    setQuantity(Math.min(product.stock, quantity + 1))
-                  }
-                  disabled={quantity >= product.stock}
-                  aria-label="Tambah"
-                >
-                  <Plus size={14} />
-                </button>
-              </div>
-              <p
-                style={{ fontSize: 12, color: "var(--gray-400)", marginTop: 8 }}
-              >
-                Maksimal {product.stock} unit tersedia
-              </p>
-            </div>
-
-            {/* Actions */}
-            <div
-              style={{
-                display: "flex",
-                gap: 10,
-                marginTop: "auto",
-              }}
-            >
-              <ClickSpark
-                sparkColor="#ee4d2d"
-                sparkCount={10}
-                sparkRadius={18}
-                style={{ flex: 1 }}
-              >
-                <button
-                  className="btn btn-outline btn-full"
-                  style={{ padding: "14px" }}
-                  onClick={addToCart}
-                  disabled={product.stock === 0}
-                >
-                  <ShoppingCart size={16} /> Keranjang
-                </button>
-              </ClickSpark>
-              <StarBorder
-                as="button"
-                style={{ flex: 1 }}
-                innerClassName="btn btn-primary"
-                color="#ffd280"
-                thickness={2}
-                onClick={buyNow}
-                disabled={product.stock === 0}
-              >
-                <span style={{ padding: "6px 0", display: "inline-flex", alignItems: "center", gap: 7 }}>
-                  <Zap size={16} /> Beli Sekarang
-                </span>
-              </StarBorder>
-            </div>
-          </div>
-        </article>
-
-        {/* Related Products */}
-        {related.length > 0 && (
-          <section>
-            <div style={{ marginBottom: 20 }}>
-              <BlurText
-                text="Produk Serupa"
-                animateBy="words"
-                direction="top"
-                style={{ fontSize: 20, fontWeight: 800, color: "var(--gray-900)" }}
-              />
-              <p
-                style={{ fontSize: 13, color: "var(--gray-500)", marginTop: 4 }}
-              >
-                Rekomendasi dari kategori yang sama
-              </p>
-            </div>
-            <div
-              className="product-grid"
-              style={{ gridTemplateColumns: "repeat(4, 1fr)" }}
-            >
-              {related.map((p, i) => {
-                const rs = getStockInfo(p.stock);
-                return (
-                  <Link
-                    key={p.id}
-                    href={`/product/${p.id}`}
-                    className="product-card"
-                    style={{ animationDelay: `${i * 0.07}s` }}
+          {/* Panel beli. Jumlah, subtotal, dan dua aksi utama dikumpulkan dalam
+              satu kotak supaya keputusan membeli tidak tersebar di halaman. */}
+          <div className="surface p-5">
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <div>
+                <p className="text-[13px] font-semibold text-ink">Jumlah</p>
+                <div className="mt-2 flex h-10 w-fit items-center rounded-md border border-line">
+                  <button
+                    type="button"
+                    aria-label="Kurangi jumlah"
+                    disabled={qty <= 1}
+                    onClick={() => setQty((n) => Math.max(1, n - 1))}
+                    className="grid size-10 place-items-center rounded-l-md text-brand-ink transition-colors duration-160 hover:bg-brand-soft disabled:text-ink-3/40 disabled:hover:bg-transparent"
                   >
-                    <div className="product-image">
-                      <TiltedCard
-                        imageSrc={
-                          p.image_url ||
-                          `https://picsum.photos/seed/${p.id}/400/400`
-                        }
-                        altText={p.name}
-                        containerHeight="100%"
-                        containerWidth="100%"
-                        imageHeight="100%"
-                        imageWidth="100%"
-                        scaleOnHover={1.06}
-                        rotateAmplitude={10}
-                        showMobileWarning={false}
-                        showTooltip={false}
-                      />
-                      <div
-                        style={{
-                          position: "absolute",
-                          top: 10,
-                          right: 10,
-                          background: "rgba(255,255,255,.95)",
-                          backdropFilter: "blur(6px)",
-                          padding: "4px 10px",
-                          borderRadius: "var(--radius-pill)",
-                          fontSize: 11,
-                          fontWeight: 700,
-                          display: "flex",
-                          alignItems: "center",
-                          gap: 4,
-                          boxShadow: "var(--shadow-sm)",
-                        }}
-                      >
-                        <Star
-                          size={11}
-                          fill="var(--warning)"
-                          color="var(--warning)"
-                        />
-                        {p.rating.toFixed(1)}
-                      </div>
-                    </div>
-                    <div className="product-info">
-                      <h4 className="product-name">{p.name}</h4>
-                      <p className="product-price">{formatPrice(p.price)}</p>
-                      <div className="product-meta">
-                        <span
-                          className={`status-badge ${rs.cls}`}
-                          style={{ fontSize: 10, padding: "3px 8px" }}
-                        >
-                          {rs.icon} {p.stock}
-                        </span>
-                        <span className="product-category">{p.category}</span>
-                      </div>
-                    </div>
-                  </Link>
-                );
-              })}
+                    <Minus aria-hidden className="size-4" />
+                  </button>
+                  <span
+                    aria-live="polite"
+                    className="tnum grid h-full w-12 place-items-center border-x border-line text-[14px] font-bold"
+                  >
+                    {qty}
+                  </span>
+                  <button
+                    type="button"
+                    aria-label="Tambah jumlah"
+                    disabled={qty >= product.stock}
+                    onClick={() =>
+                      setQty((n) => Math.min(product.stock, n + 1))
+                    }
+                    className="grid size-10 place-items-center rounded-r-md text-brand-ink transition-colors duration-160 hover:bg-brand-soft disabled:text-ink-3/40 disabled:hover:bg-transparent"
+                  >
+                    <Plus aria-hidden className="size-4" />
+                  </button>
+                </div>
+              </div>
+
+              <div className="text-right">
+                <p className="text-[13px] text-ink-3">Subtotal</p>
+                <p
+                  data-testid="subtotal"
+                  className="tnum mt-1 text-[22px] leading-none font-extrabold"
+                >
+                  {formatIDR(subtotal)}
+                </p>
+              </div>
             </div>
+
+            <div className="mt-5 grid gap-2.5 sm:grid-cols-2">
+              <Button
+                variant="brandOutline"
+                size="lg"
+                disabled={soldOut || pending}
+                data-testid="add-to-cart"
+                onClick={() => startTransition(async () => void (await addToCart()))}
+              >
+                <ShoppingCart aria-hidden className="size-4" />
+                Keranjang
+              </Button>
+              <Button
+                size="lg"
+                disabled={soldOut || pending}
+                data-testid="buy-now"
+                onClick={() => {
+                  if (requireLogin()) return;
+                  router.push(`/checkout/${product.id}?qty=${qty}`);
+                }}
+              >
+                {soldOut ? "Stok habis" : "Beli sekarang"}
+              </Button>
+            </div>
+          </div>
+
+          <ul className="mt-6 grid gap-3 sm:grid-cols-3">
+            {GUARANTEES.map(({ Icon, label }) => (
+              <li
+                key={label}
+                className="flex items-start gap-2.5 rounded-xl bg-secondary/70 p-3 text-[12.5px] leading-snug text-ink-2"
+              >
+                <Icon aria-hidden className="mt-0.5 size-4 shrink-0 text-brand-ink" />
+                {label}
+              </li>
+            ))}
+          </ul>
+
+          <section className="mt-8">
+            <h2 className="micro">Deskripsi</h2>
+            <p className="mt-3 text-[14px] leading-relaxed whitespace-pre-line text-ink-2">
+              {product.description || "Penjual belum menambahkan deskripsi."}
+            </p>
           </section>
-        )}
-      </main>
+        </div>
+      </div>
 
-      {toast && <div className={`toast ${toast.type}`}>{toast.message}</div>}
-
-      <style>{`
-        @media (max-width: 768px) {
-          article.card { grid-template-columns: 1fr !important; }
-          .product-grid { grid-template-columns: repeat(2, 1fr) !important; }
-        }
-      `}</style>
+      {related.length > 0 && (
+        <section className="mt-16" aria-labelledby="terkait">
+          <div className="flex items-baseline gap-4">
+            <h2 id="terkait" className="display shrink-0 text-[26px] sm:text-[30px]">
+              Produk serupa
+            </h2>
+            <span aria-hidden className="h-px flex-1 bg-line" />
+          </div>
+          <div className="stagger mt-4 grid grid-cols-2 gap-x-4 gap-y-9 sm:gap-x-5 md:grid-cols-3 lg:grid-cols-4">
+            {related.map((p) => (
+              <ProductCard key={p.id} product={p} />
+            ))}
+          </div>
+        </section>
+      )}
     </div>
   );
 }

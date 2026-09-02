@@ -1,252 +1,175 @@
 "use client";
-// app/register/page.tsx
 
 import { useState } from "react";
-import { signIn } from "next-auth/react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, UserPlus, AlertCircle } from "lucide-react";
-import Aurora from "@/app/components/reactbits/Aurora/Aurora";
+import { signIn } from "next-auth/react";
+import { AlertCircle, Check, Eye, EyeOff } from "lucide-react";
+import { toast } from "sonner";
+
+import { AuthShell } from "@/components/auth/AuthShell";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { cn } from "@/lib/utils";
 
 export default function RegisterPage() {
   const router = useRouter();
+
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [show, setShow] = useState(false);
   const [error, setError] = useState("");
+  const [pending, setPending] = useState(false);
 
-  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+  // Syaratnya ditampilkan dan dicentang sambil user mengetik, bukan baru
+  // muncul sebagai error setelah submit.
+  const rules = [
+    { label: "Username minimal 3 karakter", ok: username.trim().length >= 3 },
+    { label: "Password minimal 6 karakter", ok: password.length >= 6 },
+  ];
+  const valid = rules.every((r) => r.ok);
+
+  async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setLoading(true);
     setError("");
+    if (!valid) return;
 
+    setPending(true);
     try {
       const res = await fetch("/api/auth/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, password }),
+        body: JSON.stringify({ username: username.trim(), password }),
       });
+      const json = await res.json();
 
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        setError(data.message || "Pendaftaran gagal. Coba username lain.");
-        setLoading(false);
+      if (!res.ok || !json.success) {
+        setError(json.message ?? "Pendaftaran gagal");
         return;
       }
 
-      await signIn("credentials", { username, password, callbackUrl: "/" });
-    } catch {
-      setError("Terjadi masalah koneksi. Coba beberapa saat lagi.");
-      setLoading(false);
+      // Langsung masuk setelah daftar — tidak masuk akal menyuruh user
+      // mengetik ulang kredensial yang baru saja dia buat.
+      const signInRes = await signIn("credentials", {
+        username: username.trim(),
+        password,
+        redirect: false,
+      });
+
+      if (signInRes?.error) {
+        toast.success("Akun dibuat. Silakan masuk.");
+        router.push("/login");
+        return;
+      }
+
+      toast.success("Selamat datang di ShopKu!");
+      router.push("/");
+      router.refresh();
+    } finally {
+      setPending(false);
     }
   }
 
   return (
-    <div className="page-container">
-      {/* ── Header ── */}
-      <header className="page-header-bar">
-        <div className="page-header-bar-inner">
-          <button
-            onClick={() => router.push("/login")}
-            className="back-btn"
-            aria-label="Kembali"
+    <AuthShell
+      title="Daftar"
+      subtitle="Bikin akun dalam 10 detik, langsung bisa belanja."
+      footer={
+        <>
+          Sudah punya akun?{" "}
+          <Link
+            href="/login"
+            className="font-semibold text-brand-ink transition-colors duration-160 hover:underline"
           >
-            <ArrowLeft size={18} />
-          </button>
-          <div className="header-text">
-            <h1 className="header-title">Daftar</h1>
-            <p className="header-subtitle">
-              Buat akun baru untuk mulai belanja
-            </p>
-          </div>
-        </div>
-      </header>
-
-      {/* ── Main (dark backdrop so the orange Aurora glow has contrast) ── */}
-      <div
-        style={{
-          position: "relative",
-          flex: 1,
-          display: "flex",
-          flexDirection: "column",
-          overflow: "hidden",
-          background: "#1c1210",
-        }}
-      >
-        <div style={{ position: "absolute", inset: 0 }}>
-          <Aurora colorStops={["#ff6742", "#ee4d2d", "#d73211"]} amplitude={1.2} blend={0.6} />
-        </div>
-        <main
-          className="page-main"
-          style={{ position: "relative", zIndex: 1, maxWidth: 520, justifyContent: "flex-start" }}
-        >
-        {/* Error Alert */}
+            Masuk
+          </Link>
+        </>
+      }
+    >
+      <form onSubmit={onSubmit} className="space-y-4" noValidate>
         {error && (
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 10,
-              background: "var(--primary-50)",
-              border: "1px solid var(--primary-100)",
-              borderLeft: "3px solid var(--primary)",
-              color: "var(--primary-dark)",
-              padding: "12px 16px",
-              borderRadius: "var(--radius-lg)",
-              fontSize: 13,
-              fontWeight: 500,
-            }}
+          <p
+            role="alert"
+            data-testid="auth-error"
+            className="flex items-center gap-2 rounded-xl bg-destructive/10 px-3.5 py-2.5 text-[13px] font-semibold text-destructive"
           >
-            <AlertCircle size={16} style={{ flexShrink: 0 }} />
-            <p>{error}</p>
-          </div>
+            <AlertCircle aria-hidden className="size-4 shrink-0" />
+            {error}
+          </p>
         )}
 
-        {/* Register Card */}
-        <div className="card">
-          {/* Card Header */}
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 12,
-              marginBottom: 20,
-              paddingBottom: 16,
-              borderBottom: "1px solid var(--gray-200)",
-            }}
-          >
-            <div
-              style={{
-                width: 42,
-                height: 42,
-                borderRadius: "var(--radius-lg)",
-                background: "var(--primary-50)",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                color: "var(--primary)",
-              }}
-            >
-              <UserPlus size={20} />
-            </div>
-            <div>
-              <p
-                style={{
-                  fontWeight: 700,
-                  fontSize: 14,
-                  color: "var(--gray-900)",
-                }}
-              >
-                Buat Akun Baru
-              </p>
-              <p
-                style={{ fontSize: 12, color: "var(--gray-500)", marginTop: 2 }}
-              >
-                Isi data di bawah untuk mendaftar
-              </p>
-            </div>
-          </div>
+        <div>
+          <Label htmlFor="username">Username</Label>
+          <Input
+            id="username"
+            autoComplete="username"
+            required
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            placeholder="Pilih username unik"
+            className="mt-1.5 h-11"
+          />
+        </div>
 
-          {/* Form */}
-          <form
-            onSubmit={handleSubmit}
-            style={{ display: "flex", flexDirection: "column", gap: 16 }}
-          >
-            <div className="form-group">
-              <label className="form-label">Username</label>
-              <input
-                type="text"
-                required
-                placeholder="Masukkan username"
-                className="form-input"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                disabled={loading}
-              />
-            </div>
-
-            <div className="form-group">
-              <label className="form-label">Password</label>
-              <input
-                type="password"
-                required
-                minLength={6}
-                placeholder="Minimal 6 karakter"
-                className="form-input"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                disabled={loading}
-              />
-            </div>
-
+        <div>
+          <Label htmlFor="password">Password</Label>
+          <div className="relative mt-1.5">
+            <Input
+              id="password"
+              type={show ? "text" : "password"}
+              autoComplete="new-password"
+              required
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Minimal 6 karakter"
+              className="h-11 pr-11"
+            />
             <button
-              type="submit"
-              disabled={loading}
-              className="btn btn-primary btn-full"
-              style={{ padding: "14px", marginTop: 4 }}
+              type="button"
+              aria-label={show ? "Sembunyikan password" : "Tampilkan password"}
+              onClick={() => setShow((v) => !v)}
+              className="absolute top-1/2 right-1 grid size-9 -translate-y-1/2 place-items-center rounded-lg text-ink-3 transition-colors duration-160 hover:text-ink focus-visible:ring-[3px] focus-visible:ring-brand/25 focus-visible:outline-none"
             >
-              {loading ? (
-                <>
-                  <span className="spinner-sm" /> Memproses...
-                </>
+              {show ? (
+                <EyeOff aria-hidden className="size-4" />
               ) : (
-                "Daftar Sekarang"
+                <Eye aria-hidden className="size-4" />
               )}
             </button>
-          </form>
-
-          {/* Login Footer */}
-          <div
-            style={{
-              textAlign: "center",
-              marginTop: 24,
-              paddingTop: 20,
-              borderTop: "1px dashed var(--gray-200)",
-              fontSize: 13,
-              color: "var(--gray-600)",
-            }}
-          >
-            Sudah punya akun?{" "}
-            <Link
-              href="/login"
-              style={{
-                color: "var(--primary)",
-                fontWeight: 700,
-                textDecoration: "none",
-              }}
-            >
-              Masuk Sekarang
-            </Link>
           </div>
         </div>
 
-        {/* Support Links */}
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "center",
-            alignItems: "center",
-            gap: 12,
-            fontSize: 12,
-            color: "var(--gray-400)",
-          }}
+        <ul className="space-y-2">
+          {rules.map((rule) => (
+            <li
+              key={rule.label}
+              className={cn(
+                "flex items-center gap-2 text-[12.5px] transition-colors duration-160",
+                rule.ok ? "text-success" : "text-ink-3"
+              )}
+            >
+              <Check
+                aria-hidden
+                className={cn(
+                  "size-3.5 transition-opacity duration-160",
+                  rule.ok ? "opacity-100" : "opacity-35"
+                )}
+              />
+              {rule.label}
+            </li>
+          ))}
+        </ul>
+
+        <Button
+          type="submit"
+          size="lg"
+          className="w-full"
+          disabled={!valid || pending}
         >
-          <Link
-            href="#"
-            style={{ color: "var(--gray-400)", textDecoration: "none" }}
-          >
-            Bantuan
-          </Link>
-          <span>•</span>
-          <Link
-            href="#"
-            style={{ color: "var(--gray-400)", textDecoration: "none" }}
-          >
-            Kebijakan Privasi
-          </Link>
-        </div>
-        </main>
-      </div>
-    </div>
+          {pending ? "Mendaftarkan…" : "Daftar"}
+        </Button>
+      </form>
+    </AuthShell>
   );
 }

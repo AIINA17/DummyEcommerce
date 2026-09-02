@@ -1,269 +1,132 @@
 "use client";
-// app/login/page.tsx
 
-import { signIn } from "next-auth/react";
+import { Suspense, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useState } from "react";
-import { ArrowLeft, Lock, AlertCircle } from "lucide-react";
-import Aurora from "@/app/components/reactbits/Aurora/Aurora";
+import { useRouter, useSearchParams } from "next/navigation";
+import { signIn } from "next-auth/react";
+import { AlertCircle, Eye, EyeOff } from "lucide-react";
 
-export default function LoginPage() {
+import { AuthShell } from "@/components/auth/AuthShell";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+
+function LoginForm() {
   const router = useRouter();
+  const params = useSearchParams();
+  const callbackUrl = params.get("callbackUrl") ?? "/";
+
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [show, setShow] = useState(false);
   const [error, setError] = useState("");
+  const [pending, setPending] = useState(false);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setLoading(true);
     setError("");
-    try {
-      const result = await signIn("credentials", {
-        username,
-        password,
-        redirect: false,
-      });
-      if (result?.error) {
-        setError("Username atau password salah. Silakan coba lagi.");
-        setLoading(false);
-      } else {
-        router.push("/");
-        router.refresh();
-      }
-    } catch {
-      setError("Terjadi masalah koneksi. Coba beberapa saat lagi.");
-      setLoading(false);
+    setPending(true);
+
+    const res = await signIn("credentials", {
+      username,
+      password,
+      redirect: false,
+    });
+
+    setPending(false);
+
+    if (res?.error) {
+      setError("Username atau password salah");
+      return;
     }
-  };
+
+    router.push(callbackUrl);
+    router.refresh();
+  }
 
   return (
-    <div className="page-container">
-      {/* ── Header ── */}
-      <header className="page-header-bar">
-        <div className="page-header-bar-inner">
-          <button
-            onClick={() => router.push("/")}
-            className="back-btn"
-            aria-label="Kembali"
-          >
-            <ArrowLeft size={18} />
-          </button>
-          <div className="header-text">
-            <h1 className="header-title">Masuk</h1>
-            <p className="header-subtitle">
-              Silakan login untuk melanjutkan transaksi
-            </p>
-          </div>
-        </div>
-      </header>
-
-      {/* ── Main (dark backdrop so the orange Aurora glow has contrast) ── */}
-      <div
-        style={{
-          position: "relative",
-          flex: 1,
-          display: "flex",
-          flexDirection: "column",
-          overflow: "hidden",
-          background: "#1c1210",
-        }}
-      >
-        <div style={{ position: "absolute", inset: 0 }}>
-          <Aurora colorStops={["#ff6742", "#ee4d2d", "#d73211"]} amplitude={1.2} blend={0.6} />
-        </div>
-        <main
-          className="page-main"
-          style={{ position: "relative", zIndex: 1, maxWidth: 520, justifyContent: "flex-start" }}
+    <form onSubmit={onSubmit} className="space-y-4" noValidate>
+      {error && (
+        <p
+          role="alert"
+          data-testid="auth-error"
+          className="flex items-center gap-2 rounded-xl bg-destructive/10 px-3.5 py-2.5 text-[13px] font-semibold text-destructive"
         >
-        {/* Error Alert */}
-        {error && (
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 10,
-              background: "var(--primary-50)",
-              border: "1px solid var(--primary-100)",
-              borderLeft: "3px solid var(--primary)",
-              color: "var(--primary-dark)",
-              padding: "12px 16px",
-              borderRadius: "var(--radius-lg)",
-              fontSize: 13,
-              fontWeight: 500,
-            }}
-          >
-            <AlertCircle size={16} style={{ flexShrink: 0 }} />
-            <p>{error}</p>
-          </div>
-        )}
+          <AlertCircle aria-hidden className="size-4 shrink-0" />
+          {error}
+        </p>
+      )}
 
-        {/* Login Card */}
-        <div className="card">
-          {/* Card Header */}
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 12,
-              marginBottom: 20,
-              paddingBottom: 16,
-              borderBottom: "1px solid var(--gray-200)",
-            }}
-          >
-            <div
-              style={{
-                width: 42,
-                height: 42,
-                borderRadius: "var(--radius-lg)",
-                background: "var(--primary-50)",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                color: "var(--primary)",
-              }}
-            >
-              <Lock size={20} />
-            </div>
-            <div>
-              <p
-                style={{
-                  fontWeight: 700,
-                  fontSize: 14,
-                  color: "var(--gray-900)",
-                }}
-              >
-                Akses Akun
-              </p>
-              <p
-                style={{ fontSize: 12, color: "var(--gray-500)", marginTop: 2 }}
-              >
-                Gunakan username dan password kamu
-              </p>
-            </div>
-          </div>
-
-          {/* Form */}
-          <form
-            onSubmit={handleSubmit}
-            style={{ display: "flex", flexDirection: "column", gap: 16 }}
-          >
-            <div className="form-group">
-              <label className="form-label">Username</label>
-              <input
-                type="text"
-                required
-                placeholder="Masukkan username"
-                className="form-input"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                disabled={loading}
-              />
-            </div>
-
-            <div className="form-group">
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  marginBottom: 7,
-                }}
-              >
-                <label className="form-label" style={{ marginBottom: 0 }}>
-                  Password
-                </label>
-                <Link
-                  href="#"
-                  style={{
-                    fontSize: 12,
-                    color: "var(--info)",
-                    textDecoration: "none",
-                  }}
-                >
-                  Lupa Password?
-                </Link>
-              </div>
-              <input
-                type="password"
-                required
-                placeholder="Masukkan password"
-                className="form-input"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                disabled={loading}
-              />
-            </div>
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="btn btn-primary btn-full"
-              style={{ padding: "14px", marginTop: 4 }}
-            >
-              {loading ? (
-                <>
-                  <span className="spinner-sm" /> Memproses...
-                </>
-              ) : (
-                "Masuk Sekarang"
-              )}
-            </button>
-          </form>
-
-          {/* Register Footer */}
-          <div
-            style={{
-              textAlign: "center",
-              marginTop: 24,
-              paddingTop: 20,
-              borderTop: "1px dashed var(--gray-200)",
-              fontSize: 13,
-              color: "var(--gray-600)",
-            }}
-          >
-            Belum punya akun?{" "}
-            <Link
-              href="/register"
-              style={{
-                color: "var(--primary)",
-                fontWeight: 700,
-                textDecoration: "none",
-              }}
-            >
-              Daftar Sekarang
-            </Link>
-          </div>
-        </div>
-
-        {/* Support Links */}
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "center",
-            alignItems: "center",
-            gap: 12,
-            fontSize: 12,
-            color: "var(--gray-400)",
-          }}
-        >
-          <Link
-            href="#"
-            style={{ color: "var(--gray-400)", textDecoration: "none" }}
-          >
-            Bantuan
-          </Link>
-          <span>•</span>
-          <Link
-            href="#"
-            style={{ color: "var(--gray-400)", textDecoration: "none" }}
-          >
-            Kebijakan Privasi
-          </Link>
-        </div>
-        </main>
+      <div>
+        <Label htmlFor="username">Username</Label>
+        <Input
+          id="username"
+          name="username"
+          autoComplete="username"
+          required
+          value={username}
+          onChange={(e) => setUsername(e.target.value)}
+          placeholder="Masukkan username"
+          className="mt-1.5 h-11"
+        />
       </div>
-    </div>
+
+      <div>
+        <Label htmlFor="password">Password</Label>
+        <div className="relative mt-1.5">
+          <Input
+            id="password"
+            name="password"
+            type={show ? "text" : "password"}
+            autoComplete="current-password"
+            required
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="Masukkan password"
+            className="h-11 pr-11"
+          />
+          <button
+            type="button"
+            aria-label={show ? "Sembunyikan password" : "Tampilkan password"}
+            onClick={() => setShow((v) => !v)}
+            className="absolute top-1/2 right-1 grid size-9 -translate-y-1/2 place-items-center rounded-lg text-ink-3 transition-colors duration-160 hover:text-ink focus-visible:ring-[3px] focus-visible:ring-brand/25 focus-visible:outline-none"
+          >
+            {show ? (
+              <EyeOff aria-hidden className="size-4" />
+            ) : (
+              <Eye aria-hidden className="size-4" />
+            )}
+          </button>
+        </div>
+      </div>
+
+      <Button type="submit" size="lg" className="w-full" disabled={pending}>
+        {pending ? "Memproses…" : "Masuk"}
+      </Button>
+    </form>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <AuthShell
+      title="Masuk"
+      subtitle="Lanjutkan belanja dari mana pun kamu berhenti."
+      footer={
+        <>
+          Belum punya akun?{" "}
+          <Link
+            href="/register"
+            className="font-semibold text-brand-ink transition-colors duration-160 hover:underline"
+          >
+            Daftar
+          </Link>
+        </>
+      }
+    >
+      <Suspense fallback={<div className="shimmer h-64 rounded-xl" />}>
+        <LoginForm />
+      </Suspense>
+    </AuthShell>
   );
 }
