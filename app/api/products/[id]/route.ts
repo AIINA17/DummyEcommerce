@@ -1,32 +1,26 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
+import { pool } from "@/lib/db";
 
 export async function GET(
-  req: Request,
-  ctx: { params: Promise<{ id: string }> }
+    req: Request,
+    ctx: { params: Promise<{ id: string }> },
 ) {
-  const { id } = await ctx.params;
+    const { id } = await ctx.params;
 
-  const { data, error } = await supabase
-    .from("products")
-    .select("*")
-    .eq("id", Number(id))
-    .single();
+    const { rows } = await pool.query("SELECT * FROM products WHERE id = $1", [
+        Number(id),
+    ]);
+    const data = rows[0];
 
-  if (error || !data) {
-    return NextResponse.json(
-      { success: false, message: "Product not found" },
-      { status: 404 }
-    );
-  }
+    if (!data) {
+        return NextResponse.json(
+            { success: false, message: "Product not found" },
+            { status: 404 },
+        );
+    }
 
-  return NextResponse.json({
-    success: true,
-    data,
-  });
+    return NextResponse.json({
+        success: true,
+        data,
+    });
 }

@@ -1,233 +1,173 @@
-//app/api/cart/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { pool } from "@/lib/db";
 import { getAuthUserId } from "@/lib/jwt";
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
+const cartQuery = `SELECT c.*, row_to_json(p) AS products FROM cart c JOIN products p ON p.id = c.product_id`;
 
-// =====================================================
-// GET - Ambil semua item di cart user yang sedang login
-// =====================================================
 export async function GET(request: NextRequest) {
-  try {
-    const userId = await getAuthUserId(request);
-
-    if (!userId) {
-      return NextResponse.json(
-        { success: false, error: "Unauthorized" },
-        { status: 401 }
-      );
+    try {
+        const userId = await getAuthUserId(request);
+        if (!userId)
+            return NextResponse.json(
+                { success: false, error: "Unauthorized" },
+                { status: 401 },
+            );
+        const { rows } = await pool.query(
+            `${cartQuery} WHERE c.user_id = $1 ORDER BY c.created_at DESC`,
+            [userId],
+        );
+        return NextResponse.json({ success: true, data: rows });
+    } catch (error) {
+        console.error("Server error:", error);
+        return NextResponse.json(
+            { success: false, error: "Internal server error" },
+            { status: 500 },
+        );
     }
-
-    // Ambil cart items dengan join ke tabel products
-    const { data, error } = await supabase
-      .from("cart")
-      .select(`
-        *,
-        products (*)
-      `)
-      .eq("user_id", userId)
-      .order("created_at", { ascending: false });
-
-    if (error) {
-      console.error("Supabase error:", error);
-      return NextResponse.json({ success: false, error: error.message }, { status: 500 });
-    }
-
-    return NextResponse.json({ success: true, data: data || [] });
-  } catch (error) {
-    console.error("Server error:", error);
-    return NextResponse.json({ success: false, error: "Internal server error" }, { status: 500 });
-  }
 }
 
-// =====================================================
-// POST - Tambah item ke cart user yang sedang login
-// =====================================================
 export async function POST(request: NextRequest) {
-  try {
-    const userId = await getAuthUserId(request);
-
-    if (!userId) {
-      return NextResponse.json(
-        { success: false, error: "Unauthorized" },
-        { status: 401 }
-      );
+    try {
+        const userId = await getAuthUserId(request);
+        if (!userId)
+            return NextResponse.json(
+                { success: false, error: "Unauthorized" },
+                { status: 401 },
+            );
+        const { product_id, quantity = 1 } = await request.json();
+        if (!product_id)
+            return NextResponse.json(
+                { success: false, error: "product_id is required" },
+                { status: 400 },
+            );
+        const existing = await pool.query(
+            "SELECT id, quantity FROM cart WHERE user_id = $1 AND product_id = $2",
+            [userId, product_id],
+        );
+        let cartId: number;
+        let message: string;
+        if (existing.rows[0]) {
+            cartId = existing.rows[0].id;
+            await pool.query("UPDATE cart SET quantity = $1 WHERE id = $2", [
+                existing.rows[0].quantity + quantity,
+                cartId,
+            ]);
+            message = "Quantity updated";
+        } else {
+            const inserted = await pool.query(
+                "INSERT INTO cart (user_id, product_id, quantity) VALUES ($1, $2, $3) RETURNING id",
+                [userId, product_id, quantity],
+            );
+            cartId = inserted.rows[0].id;
+            message = "Added to cart";
+        }
+        const { rows } = await pool.query(`${cartQuery} WHERE c.id = $1`, [
+            cartId,
+        ]);
+        return NextResponse.json({ success: true, data: rows[0], message });
+    } catch (error) {
+        console.error("Server error:", error);
+        return NextResponse.json(
+            { success: false, error: "Internal server error" },
+            { status: 500 },
+        );
     }
-
-    const body = await request.json();
-    const { product_id, quantity = 1 } = body;
-
-    if (!product_id) {
-      return NextResponse.json(
-        { success: false, error: "product_id is required" },
-        { status: 400 }
-      );
-    }
-
-    // Cek apakah product sudah ada di cart
-    const { data: existing } = await supabase
-      .from("cart")
-      .select("*")
-      .eq("user_id", userId)
-      .eq("product_id", product_id)
-      .single();
-
-    if (existing) {
-      // Kalau sudah ada, update quantity
-      const { data, error } = await supabase
-        .from("cart")
-        .update({ quantity: existing.quantity + quantity })
-        .eq("id", existing.id)
-        .select(`*, products (*)`)
-        .single();
-
-      if (error) {
-        return NextResponse.json({ success: false, error: error.message }, { status: 500 });
-      }
-
-      return NextResponse.json({ success: true, data, message: "Quantity updated" });
-    } else {
-      // Kalau belum ada, insert baru
-      const { data, error } = await supabase
-        .from("cart")
-        .insert({ user_id: userId, product_id, quantity })
-        .select(`*, products (*)`)
-        .single();
-
-      if (error) {
-        return NextResponse.json({ success: false, error: error.message }, { status: 500 });
-      }
-
-      return NextResponse.json({ success: true, data, message: "Added to cart" });
-    }
-  } catch (error) {
-    console.error("Server error:", error);
-    return NextResponse.json({ success: false, error: "Internal server error" }, { status: 500 });
-  }
 }
 
-// =====================================================
-// PUT - Update quantity item di cart (hanya milik sendiri)
-// =====================================================
 export async function PUT(request: NextRequest) {
-  try {
-    const userId = await getAuthUserId(request);
-
-    if (!userId) {
-      return NextResponse.json(
-        { success: false, error: "Unauthorized" },
-        { status: 401 }
-      );
+    try {
+        const userId = await getAuthUserId(request);
+        if (!userId)
+            return NextResponse.json(
+                { success: false, error: "Unauthorized" },
+                { status: 401 },
+            );
+        const { cart_id, quantity } = await request.json();
+        if (!cart_id || quantity === undefined)
+            return NextResponse.json(
+                { success: false, error: "cart_id and quantity are required" },
+                { status: 400 },
+            );
+        const existing = await pool.query(
+            "SELECT user_id FROM cart WHERE id = $1",
+            [cart_id],
+        );
+        if (!existing.rows[0])
+            return NextResponse.json(
+                { success: false, error: "Cart item not found" },
+                { status: 404 },
+            );
+        if (existing.rows[0].user_id !== userId)
+            return NextResponse.json(
+                { success: false, error: "Forbidden" },
+                { status: 403 },
+            );
+        if (quantity <= 0) {
+            await pool.query("DELETE FROM cart WHERE id = $1", [cart_id]);
+            return NextResponse.json({
+                success: true,
+                message: "Item removed from cart",
+            });
+        }
+        await pool.query("UPDATE cart SET quantity = $1 WHERE id = $2", [
+            quantity,
+            cart_id,
+        ]);
+        const { rows } = await pool.query(`${cartQuery} WHERE c.id = $1`, [
+            cart_id,
+        ]);
+        return NextResponse.json({
+            success: true,
+            data: rows[0],
+            message: "Quantity updated",
+        });
+    } catch (error) {
+        console.error("Server error:", error);
+        return NextResponse.json(
+            { success: false, error: "Internal server error" },
+            { status: 500 },
+        );
     }
-
-    const body = await request.json();
-    const { cart_id, quantity } = body;
-
-    if (!cart_id || quantity === undefined) {
-      return NextResponse.json(
-        { success: false, error: "cart_id and quantity are required" },
-        { status: 400 }
-      );
-    }
-
-    // Pastikan cart item ini benar milik user yang sedang login
-    const { data: existing, error: findError } = await supabase
-      .from("cart")
-      .select("id, user_id")
-      .eq("id", cart_id)
-      .single();
-
-    if (findError || !existing) {
-      return NextResponse.json({ success: false, error: "Cart item not found" }, { status: 404 });
-    }
-    if (existing.user_id !== userId) {
-      return NextResponse.json({ success: false, error: "Forbidden" }, { status: 403 });
-    }
-
-    // Kalau quantity 0 atau kurang, hapus item
-    if (quantity <= 0) {
-      const { error } = await supabase
-        .from("cart")
-        .delete()
-        .eq("id", cart_id);
-
-      if (error) {
-        return NextResponse.json({ success: false, error: error.message }, { status: 500 });
-      }
-
-      return NextResponse.json({ success: true, message: "Item removed from cart" });
-    }
-
-    // Update quantity
-    const { data, error } = await supabase
-      .from("cart")
-      .update({ quantity })
-      .eq("id", cart_id)
-      .select(`*, products (*)`)
-      .single();
-
-    if (error) {
-      return NextResponse.json({ success: false, error: error.message }, { status: 500 });
-    }
-
-    return NextResponse.json({ success: true, data, message: "Quantity updated" });
-  } catch (error) {
-    console.error("Server error:", error);
-    return NextResponse.json({ success: false, error: "Internal server error" }, { status: 500 });
-  }
 }
 
-// =====================================================
-// DELETE - Hapus item dari cart (hanya milik sendiri)
-// =====================================================
 export async function DELETE(request: NextRequest) {
-  try {
-    const userId = await getAuthUserId(request);
-
-    if (!userId) {
-      return NextResponse.json(
-        { success: false, error: "Unauthorized" },
-        { status: 401 }
-      );
+    try {
+        const userId = await getAuthUserId(request);
+        if (!userId)
+            return NextResponse.json(
+                { success: false, error: "Unauthorized" },
+                { status: 401 },
+            );
+        const cartId = Number(new URL(request.url).searchParams.get("cart_id"));
+        if (!Number.isInteger(cartId) || cartId <= 0)
+            return NextResponse.json(
+                { success: false, error: "cart_id is required" },
+                { status: 400 },
+            );
+        const existing = await pool.query(
+            "SELECT user_id FROM cart WHERE id = $1",
+            [cartId],
+        );
+        if (!existing.rows[0])
+            return NextResponse.json(
+                { success: false, error: "Cart item not found" },
+                { status: 404 },
+            );
+        if (existing.rows[0].user_id !== userId)
+            return NextResponse.json(
+                { success: false, error: "Forbidden" },
+                { status: 403 },
+            );
+        await pool.query("DELETE FROM cart WHERE id = $1", [cartId]);
+        return NextResponse.json({
+            success: true,
+            message: "Item removed from cart",
+        });
+    } catch (error) {
+        console.error("Server error:", error);
+        return NextResponse.json(
+            { success: false, error: "Internal server error" },
+            { status: 500 },
+        );
     }
-
-    const { searchParams } = new URL(request.url);
-    const cartId = searchParams.get("cart_id");
-
-    if (!cartId || !Number.isFinite(parseInt(cartId))) {
-      return NextResponse.json({ success: false, error: "cart_id is required" }, { status: 400 });
-    }
-
-    // Pastikan cart item ini benar milik user yang sedang login
-    const { data: existing, error: findError } = await supabase
-      .from("cart")
-      .select("id, user_id")
-      .eq("id", parseInt(cartId))
-      .single();
-
-    if (findError || !existing) {
-      return NextResponse.json({ success: false, error: "Cart item not found" }, { status: 404 });
-    }
-    if (existing.user_id !== userId) {
-      return NextResponse.json({ success: false, error: "Forbidden" }, { status: 403 });
-    }
-
-    const { error } = await supabase
-      .from("cart")
-      .delete()
-      .eq("id", parseInt(cartId));
-
-    if (error) {
-      return NextResponse.json({ success: false, error: error.message }, { status: 500 });
-    }
-
-    return NextResponse.json({ success: true, message: "Item removed from cart" });
-  } catch (error) {
-    console.error("Server error:", error);
-    return NextResponse.json({ success: false, error: "Internal server error" }, { status: 500 });
-  }
 }
