@@ -7,6 +7,26 @@ export interface Product {
   rating: number;
   stock: number;
   image_url: string;
+  store_id: number | null;
+  store?: Store;
+  reviews?: ProductReview[];
+}
+
+export interface Store {
+  id: number;
+  name: string;
+  city: string;
+  address: string;
+  created_at: string;
+}
+
+export interface ProductReview {
+  id: number;
+  product_id: number;
+  reviewer_name: string;
+  rating: number;
+  comment: string;
+  created_at: string;
 }
 
 export interface CartItem {

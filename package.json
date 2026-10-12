@@ -8,6 +8,7 @@
         "start": "next start",
         "lint": "eslint",
         "typecheck": "tsc --noEmit",
+        "seed:stores-reviews": "node scripts/seed-stores-and-reviews.mjs",
         "test": "playwright test",
         "test:report": "playwright show-report"
     },

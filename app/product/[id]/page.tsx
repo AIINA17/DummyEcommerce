@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import {
   ChevronRight,
+  MapPin,
   Minus,
   PackageX,
   Plus,
@@ -63,13 +64,13 @@ export default function ProductPage({
 
         const res = await fetch(
           `/api/products?category=${encodeURIComponent(current.category)}`,
-          { signal: controller.signal }
+          { signal: controller.signal },
         );
         const all = await res.json();
         setRelated(
           (all.data ?? [])
             .filter((p: Product) => p.id !== current.id)
-            .slice(0, 4)
+            .slice(0, 4),
         );
       })
       .catch(() => {})
@@ -113,7 +114,9 @@ export default function ProductPage({
           icon={PackageX}
           title="Produk tidak ditemukan"
           body="Mungkin produknya sudah dihapus penjual, atau alamatnya salah ketik."
-          action={<Button render={<Link href="/" />}>Kembali ke beranda</Button>}
+          action={
+            <Button render={<Link href="/" />}>Kembali ke beranda</Button>
+          }
         />
       </div>
     );
@@ -127,7 +130,10 @@ export default function ProductPage({
       <nav aria-label="Breadcrumb" className="mb-5">
         <ol className="flex flex-wrap items-center gap-1 text-[13px] text-ink-3">
           <li>
-            <Link href="/" className="transition-colors duration-160 hover:text-brand-ink">
+            <Link
+              href="/"
+              className="transition-colors duration-160 hover:text-brand-ink"
+            >
               Beranda
             </Link>
           </li>
@@ -152,7 +158,11 @@ export default function ProductPage({
           <div className="surface overflow-hidden">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src={broken ? productImage(product.id) : productImage(product.id, product.image_url)}
+              src={
+                broken
+                  ? productImage(product.id)
+                  : productImage(product.id, product.image_url)
+              }
               alt={product.name}
               width={800}
               height={800}
@@ -237,7 +247,9 @@ export default function ProductPage({
                 size="lg"
                 disabled={soldOut || pending}
                 data-testid="add-to-cart"
-                onClick={() => startTransition(async () => void (await addToCart()))}
+                onClick={() =>
+                  startTransition(async () => void (await addToCart()))
+                }
               >
                 <ShoppingCart aria-hidden className="size-4" />
                 Keranjang
@@ -262,7 +274,10 @@ export default function ProductPage({
                 key={label}
                 className="flex items-start gap-2.5 rounded-xl bg-secondary/70 p-3 text-[12.5px] leading-snug text-ink-2"
               >
-                <Icon aria-hidden className="mt-0.5 size-4 shrink-0 text-brand-ink" />
+                <Icon
+                  aria-hidden
+                  className="mt-0.5 size-4 shrink-0 text-brand-ink"
+                />
                 {label}
               </li>
             ))}
@@ -277,10 +292,64 @@ export default function ProductPage({
         </div>
       </div>
 
+      {product.store && (
+        <section className="mt-8">
+          <h2 className="micro">Toko</h2>
+          <div className="mt-3 flex items-start gap-2.5 rounded-xl bg-secondary/70 p-4 text-[13px] text-ink-2">
+            <MapPin
+              aria-hidden
+              className="mt-0.5 size-4 shrink-0 text-brand-ink"
+            />
+            <div>
+              <p className="font-semibold text-ink">{product.store.name}</p>
+              <p className="mt-0.5">
+                {product.store.address}, {product.store.city}
+              </p>
+            </div>
+          </div>
+        </section>
+      )}
+
+      <section className="mt-8">
+        <h2 className="micro">Ulasan ({product.reviews?.length ?? 0})</h2>
+
+        {product.reviews && product.reviews.length > 0 ? (
+          <ul className="mt-3 space-y-4">
+            {product.reviews.map((r) => (
+              <li key={r.id} className="rounded-xl border border-line p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-[13px] font-semibold text-ink">
+                    {r.reviewer_name}
+                  </p>
+                  <Rating value={r.rating} className="text-ink-2" />
+                </div>
+                <p className="mt-2 text-[13px] leading-relaxed text-ink-2">
+                  {r.comment}
+                </p>
+                <p className="mt-2 text-[11px] text-ink-3">
+                  {new Date(r.created_at).toLocaleDateString("id-ID", {
+                    day: "numeric",
+                    month: "long",
+                    year: "numeric",
+                  })}
+                </p>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="mt-3 text-[13px] text-ink-2">
+            Belum ada ulasan untuk produk ini.
+          </p>
+        )}
+      </section>
+
       {related.length > 0 && (
         <section className="mt-16" aria-labelledby="terkait">
           <div className="flex items-baseline gap-4">
-            <h2 id="terkait" className="display shrink-0 text-[26px] sm:text-[30px]">
+            <h2
+              id="terkait"
+              className="display shrink-0 text-[26px] sm:text-[30px]"
+            >
               Produk serupa
             </h2>
             <span aria-hidden className="h-px flex-1 bg-line" />
