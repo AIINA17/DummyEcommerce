@@ -42,10 +42,18 @@ export async function GET(
     [productId],
   );
 
+  const avgRating =
+    reviews.length > 0
+      ? Math.round(
+          (reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length) * 10,
+        ) / 10
+      : data.rating;
+
   return NextResponse.json({
     success: true,
     data: {
       ...data,
+      rating: avgRating,
       reviews,
     },
   });

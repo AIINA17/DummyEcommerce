@@ -37,7 +37,7 @@ export async function GET(request: NextRequest) {
     const minRating = parseFloat(rating);
     if (rating && Number.isFinite(minRating)) {
       values.push(minRating);
-      conditions.push(`p.rating >= $${values.length}`);
+      conditions.push(`COALESCE(rv.avg_rating, p.rating) >= $${values.length}`);
     }
     const orderBy =
       sort === "price_asc"
@@ -45,12 +45,21 @@ export async function GET(request: NextRequest) {
         : sort === "price_desc"
           ? "p.price DESC"
           : sort === "rating_desc"
-            ? "p.rating DESC"
+            ? "COALESCE(rv.avg_rating, p.rating) DESC"
             : "p.id ASC";
     const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
     const { rows: data } = await pool.query(
       `SELECT
-                p.*,
+                p.id,
+                p.name,
+                p.description,
+                p.price,
+                p.category,
+                p.stock,
+                p.image_url,
+                p.store_id,
+                p.created_at,
+                COALESCE(rv.avg_rating, p.rating) AS rating,
                 CASE WHEN s.id IS NOT NULL THEN
                     json_build_object(
                         'id', s.id,
@@ -62,6 +71,11 @@ export async function GET(request: NextRequest) {
                 ELSE NULL END AS store
              FROM products p
              LEFT JOIN stores s ON s.id = p.store_id
+             LEFT JOIN (
+                 SELECT product_id, ROUND(AVG(rating)::numeric, 1) AS avg_rating
+                 FROM product_reviews
+                 GROUP BY product_id
+             ) rv ON rv.product_id = p.id
              ${where}
              ORDER BY ${orderBy}`,
       values,
