@@ -10,6 +10,7 @@ export interface Product {
   store_id: number | null;
   store?: Store;
   reviews?: ProductReview[];
+  images?: ProductImage[];
 }
 
 export interface Store {
@@ -68,4 +69,11 @@ export interface Order {
   created_at: string;
   updated_at?: string;
   order_items: OrderItem[];
+}
+
+export interface ProductImage {
+  id: number;
+  product_id: number;
+  image_url: string;
+  sort_order: number;
 }

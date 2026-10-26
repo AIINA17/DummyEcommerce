@@ -48,6 +48,9 @@ export default function ProductPage({
   const [qty, setQty] = useState(1);
   const [broken, setBroken] = useState(false);
   const [pending, startTransition] = useTransition();
+  const [activeImage, setActiveImage] = useState(0);
+  const [dragStartX, setDragStartX] = useState<number | null>(null);
+  const [dragDeltaX, setDragDeltaX] = useState(0);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -61,6 +64,8 @@ export default function ProductPage({
         }
         const current: Product = json.data;
         setProduct(current);
+        setActiveImage(0);
+        setBroken(false);
 
         const res = await fetch(
           `/api/products?category=${encodeURIComponent(current.category)}`,
@@ -155,21 +160,109 @@ export default function ProductPage({
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,460px)_1fr] lg:gap-10">
         <div className="lg:sticky lg:top-24 lg:h-fit">
-          <div className="surface overflow-hidden">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={
-                broken
-                  ? productImage(product.id)
-                  : productImage(product.id, product.image_url)
-              }
-              alt={product.name}
-              width={800}
-              height={800}
-              onError={() => setBroken(true)}
-              className="aspect-square w-full object-cover"
-            />
-          </div>
+          {(() => {
+            const gallery = [
+              broken
+                ? productImage(product.id)
+                : productImage(product.id, product.image_url),
+              ...(product.images ?? []).map((img) => img.image_url),
+            ];
+
+            function goTo(index: number) {
+              setActiveImage(Math.max(0, Math.min(gallery.length - 1, index)));
+            }
+
+            function handleDragStart(x: number) {
+              setDragStartX(x);
+              setDragDeltaX(0);
+            }
+            function handleDragMove(x: number) {
+              if (dragStartX === null) return;
+              setDragDeltaX(x - dragStartX);
+            }
+            function handleDragEnd() {
+              if (dragStartX === null) return;
+              const threshold = 60;
+              if (dragDeltaX < -threshold) goTo(activeImage + 1);
+              else if (dragDeltaX > threshold) goTo(activeImage - 1);
+              setDragStartX(null);
+              setDragDeltaX(0);
+            }
+
+            return (
+              <>
+                <div
+                  className="surface relative touch-pan-y select-none overflow-hidden"
+                  onPointerDown={(e) => handleDragStart(e.clientX)}
+                  onPointerMove={(e) => handleDragMove(e.clientX)}
+                  onPointerUp={handleDragEnd}
+                  onPointerLeave={() => dragStartX !== null && handleDragEnd()}
+                >
+                  <div
+                    className="flex aspect-square"
+                    style={{
+                      transform: `translateX(calc(${-activeImage * 100}% + ${dragDeltaX}px))`,
+                      transition:
+                        dragStartX === null ? "transform 220ms ease" : "none",
+                    }}
+                  >
+                    {gallery.map((src, i) => (
+                      /* eslint-disable-next-line @next/next/no-img-element */
+                      <img
+                        key={i}
+                        src={src}
+                        alt={`${product.name} ${i + 1}`}
+                        width={800}
+                        height={800}
+                        onError={() => i === 0 && setBroken(true)}
+                        className="aspect-square w-full shrink-0 object-cover"
+                        draggable={false}
+                      />
+                    ))}
+                  </div>
+
+                  {gallery.length > 1 && (
+                    <>
+                      <button
+                        type="button"
+                        aria-label="Foto sebelumnya"
+                        onClick={() => goTo(activeImage - 1)}
+                        disabled={activeImage === 0}
+                        className="absolute left-2 top-1/2 grid size-8 -translate-y-1/2 place-items-center rounded-full bg-white/80 text-ink shadow disabled:opacity-0"
+                      >
+                        ‹
+                      </button>
+                      <button
+                        type="button"
+                        aria-label="Foto selanjutnya"
+                        onClick={() => goTo(activeImage + 1)}
+                        disabled={activeImage === gallery.length - 1}
+                        className="absolute right-2 top-1/2 grid size-8 -translate-y-1/2 place-items-center rounded-full bg-white/80 text-ink shadow disabled:opacity-0"
+                      >
+                        ›
+                      </button>
+                    </>
+                  )}
+                </div>
+
+                {gallery.length > 1 && (
+                  <div className="mt-3 flex justify-center gap-1.5">
+                    {gallery.map((_, i) => (
+                      <button
+                        key={i}
+                        type="button"
+                        aria-label={`Foto ${i + 1}`}
+                        onClick={() => goTo(i)}
+                        className={`h-1.5 rounded-full transition-all duration-160 ${
+                          i === activeImage ? "w-6 bg-brand" : "w-1.5 bg-line"
+                        }`}
+                      />
+                    ))}
+                  </div>
+                )}
+              </>
+            );
+          })()}
         </div>
 
         <div>

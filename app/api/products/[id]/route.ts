@@ -42,6 +42,14 @@ export async function GET(
     [productId],
   );
 
+  const { rows: images } = await pool.query(
+    `SELECT id, product_id, image_url, sort_order
+     FROM product_images
+     WHERE product_id = $1
+     ORDER BY sort_order ASC`,
+    [productId],
+  );
+
   const avgRating =
     reviews.length > 0
       ? Math.round(
@@ -55,6 +63,7 @@ export async function GET(
       ...data,
       rating: avgRating,
       reviews,
+      images,
     },
   });
 }
