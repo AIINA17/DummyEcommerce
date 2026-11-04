@@ -217,7 +217,7 @@ function AccountMenu() {
           Pesanan Saya
         </DropdownMenuItem>
         <DropdownMenuSeparator />
-        <DropdownMenuItem variant="destructive" onSelect={() => signOut()}>
+        <DropdownMenuItem variant="destructive" onClick={() => signOut()}>
           <LogOut aria-hidden className="size-4" />
           Keluar
         </DropdownMenuItem>
